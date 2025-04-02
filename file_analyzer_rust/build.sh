@@ -20,6 +20,19 @@ RELEASE_DIR="$BUILD_DIR/release"
 OUTPUT_DIR="$BUILD_DIR/bin"
 SRC_DIR="./src"
 
+# Function to show usage information
+show_help() {
+  echo -e "${BLUE}File Analyzer Build Script Usage:${NC}"
+  echo -e "  ${YELLOW}./build.sh${NC}                Build the File Analyzer tool (release mode)"
+  echo -e "  ${YELLOW}./build.sh --help${NC}         Show this help message"
+  echo -e "  ${YELLOW}./build.sh --clean${NC}        Clean build files only"
+  echo -e "  ${YELLOW}./build.sh --full-clean${NC}   Remove all generated files including binaries"
+  echo -e "  ${YELLOW}./build.sh --minimal${NC}      Build minimal size binary with UPX compression"
+  echo -e "  ${YELLOW}./build.sh --ultra-minimal${NC} Build extremely small binary (slower startup)"
+  echo -e "  ${YELLOW}./build.sh --static${NC}       Build fully static binary (no external dependencies)"
+  echo -e "  ${YELLOW}./build.sh --docker-static${NC} Build fully static binary using Docker (recommended)"
+}
+
 echo -e "${YELLOW}Starting File Analyzer build process...${NC}"
 
 # Parse command line arguments
@@ -28,9 +41,15 @@ FULL_CLEAN=false
 MINIMAL=false
 ULTRA_MINIMAL=false
 STATIC=false
+HELP=false
+DOCKER_BUILD=false
 
 for arg in "$@"; do
   case $arg in
+    --help|-h)
+      HELP=true
+      shift
+      ;;
     --clean)
       CLEAN_ONLY=true
       shift
@@ -52,8 +71,18 @@ for arg in "$@"; do
       STATIC=true
       shift
       ;;
+    --docker-static)
+      DOCKER_BUILD=true
+      shift
+      ;;
   esac
 done
+
+# Show help if requested
+if [ "$HELP" = true ]; then
+  show_help
+  exit 0
+fi
 
 # Function to clean build artifacts
 clean_build() {
@@ -74,9 +103,75 @@ clean_build() {
   fi
 }
 
+# Function to build with Docker
+docker_static_build() {
+  echo -e "${GREEN}Building static File Analyzer using Docker...${NC}"
+  
+  # Check if Docker is installed
+  if ! command -v docker &> /dev/null; then
+    echo -e "${RED}Error: Docker is not installed. Please install Docker first.${NC}"
+    echo -e "You can install Docker by following instructions at: https://docs.docker.com/get-docker/"
+    exit 1
+  fi
+  
+  # Create directory structure
+  mkdir -p "$OUTPUT_DIR"
+  
+  # Build the Docker image
+  echo -e "${YELLOW}Building Docker image...${NC}"
+  docker build -t file-analyzer .
+  
+  if [ $? -ne 0 ]; then
+    echo -e "${RED}Docker build failed!${NC}"
+    exit 1
+  fi
+  
+  echo -e "${GREEN}Docker image built successfully. Extracting binary...${NC}"
+  
+  # Create a container from the image but don't run it
+  CONTAINER_ID=$(docker create file-analyzer)
+  
+  # Create bin directory if it doesn't exist
+  mkdir -p ./bin
+  
+  # Copy the built binary from the container
+  docker cp $CONTAINER_ID:/file_analyzer ./bin/file_analyzer
+  
+  if [ $? -eq 0 ]; then
+    echo -e "${GREEN}Static binary extracted successfully${NC}"
+    docker rm $CONTAINER_ID > /dev/null
+  else
+    echo -e "${RED}Failed to extract binary from Docker container${NC}"
+    docker rm $CONTAINER_ID > /dev/null
+    exit 1
+  fi
+  
+  # Copy to main directory for convenience
+  cp ./bin/file_analyzer ./file_analyzer
+  
+  # Make executable
+  chmod +x ./file_analyzer ./bin/file_analyzer
+  
+  # Show binary size
+  bin_size=$(du -h ./file_analyzer | cut -f1)
+  echo -e "File Analyzer static binary size: ${YELLOW}$bin_size${NC}"
+  
+  # Run file command to verify binary type
+  echo -e "\n${BLUE}Binary information:${NC}"
+  file ./file_analyzer
+  
+  echo -e "${GREEN}Static binary build completed successfully!${NC}"
+}
+
 # Clean up if requested
 if [ "$CLEAN_ONLY" = true ] || [ "$FULL_CLEAN" = true ]; then
   clean_build
+  exit 0
+fi
+
+# If Docker build is requested, use Docker
+if [ "$DOCKER_BUILD" = true ]; then
+  docker_static_build
   exit 0
 fi
 
@@ -111,6 +206,7 @@ BUILD_FLAGS="--release"
 
 if [ "$STATIC" = true ]; then
     echo -e "${BLUE}Building with static linking for maximum portability...${NC}"
+    echo -e "${YELLOW}Note: If you encounter issues with static building, try using --docker-static instead.${NC}"
     # Set environment variables for static linking
     export RUSTFLAGS="-C target-feature=+crt-static -C link-self-contained=yes -C prefer-dynamic=no"
 fi
@@ -174,6 +270,8 @@ if [ $? -eq 0 ]; then
     file ./file_analyzer
 else
     echo -e "${RED}Build failed!${NC}"
+    echo -e "${YELLOW}If you're trying to build a static binary and encountering issues,${NC}"
+    echo -e "${YELLOW}try using the --docker-static option instead, which uses Docker to build a fully static binary.${NC}"
     exit 1
 fi
 
@@ -211,6 +309,7 @@ echo -e "  ${YELLOW}./build.sh --full-clean${NC}      Remove all generated files
 echo -e "  ${YELLOW}./build.sh --minimal${NC}         Build minimal size binary with UPX compression"
 echo -e "  ${YELLOW}./build.sh --ultra-minimal${NC}   Build extremely small binary (slower startup)"
 echo -e "  ${YELLOW}./build.sh --static${NC}          Build fully static binary (no external dependencies)"
+echo -e "  ${YELLOW}./build.sh --docker-static${NC}   Build fully static binary using Docker (recommended)"
 echo -e "\nFor more information, please read the README.md file."
 
 echo -e "${GREEN}Done!${NC}" 
