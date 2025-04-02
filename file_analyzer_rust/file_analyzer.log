@@ -1,0 +1,19 @@
+2025-04-01 23:53:17 - ERROR - file_analyzer::core::analyzer - Error compiling pattern for lang_javascript_HTTP Without TLS: regex parse error:
+    http:\/\/(?!localhost|127\.0\.0\.1)
+             ^^^
+error: look-around, including look-ahead and look-behind, is not supported
+2025-04-01 23:53:17 - ERROR - file_analyzer::core::analyzer - Error compiling pattern for lang_python_HTTP Without TLS: regex parse error:
+    http:\/\/(?!localhost|127\.0\.0\.1)
+             ^^^
+error: look-around, including look-ahead and look-behind, is not supported
+2025-04-01 23:53:17 - ERROR - file_analyzer::core::analyzer - Error compiling pattern for net_security_issues_Insecure Protocol: regex parse error:
+    (?i)(?:ftp:\/\/|telnet:\/\/|http:\/\/(?!localhost|127\.0\.0\.1))
+                                         ^^^
+error: look-around, including look-ahead and look-behind, is not supported
+2025-04-01 23:53:17 - ERROR - file_analyzer::core::analyzer - Error compiling pattern for pom.xml: regex parse error:
+    <([\w\-\.]+)>[0-9]+\.[0-9]+(?:\.[0-9]+)?</\1>
+                                              ^^
+error: backreferences are not supported
+2025-04-01 23:53:17 - INFO - file_analyzer::core::analyzer - Analyzing file: tests/test_data.txt
+2025-04-01 23:53:17 - INFO - file_analyzer::core::analyzer - Detected file type: Text
+2025-04-01 23:53:17 - INFO - file_analyzer::core::analyzer - Analysis completed in 40.752912ms
