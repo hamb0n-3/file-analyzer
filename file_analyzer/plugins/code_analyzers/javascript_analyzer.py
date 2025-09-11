@@ -59,7 +59,7 @@ class JavaScriptCodeAnalyzer(AnalyzerPlugin):
             'React': r'(?:React\.|ReactDOM\.|import\s+React|from\s+[\'"]react[\'"]|extends\s+React\.Component)',
             'Angular': r'(?:@Component|@NgModule|@Injectable|angular\.module|import\s+{\s*[^}]*Component[^}]*\s*}\s+from\s+[\'"]@angular/core[\'"])',
             'Vue': r'(?:new\s+Vue|Vue\.component|createApp|import\s+Vue|from\s+[\'"]vue[\'"])',
-            'jQuery': r'(?:\$\(|\jQuery\(|import\s+\$|from\s+[\'"]jquery[\'"])',
+            'jQuery': r'(?:\$\(|jQuery\(|import\s+\$|from\s+[\'"]jquery[\'"])',
             'Express': r'(?:express\(\)|app\.get\s*\(|app\.post\s*\(|app\.use\s*\(|router\.get\s*\(|import\s+express|from\s+[\'"]express[\'"])',
             'Axios': r'(?:axios\.|axios\(|import\s+axios|from\s+[\'"]axios[\'"])',
             'Lodash': r'(?:_\.|import\s+_|from\s+[\'"]lodash[\'"])',
@@ -72,7 +72,7 @@ class JavaScriptCodeAnalyzer(AnalyzerPlugin):
             'Redux': r'(?:createStore|useSelector|useDispatch|import\s+\{\s*[^}]*createStore[^}]*\s*\}\s+from\s+[\'"]redux[\'"])',
             'Webpack': r'(?:webpack\.|module\.exports|import\s+webpack)',
             'Jest': r'(?:describe\(|it\(|test\(|expect\(|jest\.|import\s+\{\s*[^}]*(jest|expect)[^}]*\s*\}\s+from)',
-            'Cypress': r'(?:cy\.|Cypress\.|describe\(.*cy\.)',
+            'Cypress': r'(?:\bcy\.|\bCypress\.)',
             'Firebase': r'(?:firebase\.|initializeApp\(|import\s+\{\s*[^}]*initializeApp[^}]*\s*\}\s+from\s+[\'"]firebase[\'"])',
             'TypeScript': r'(?:implements\s+|interface\s+[\w_]+\s*\{|type\s+[\w_]+\s*=|as\s+[\w_]+)',
         }
@@ -198,12 +198,15 @@ class JavaScriptCodeAnalyzer(AnalyzerPlugin):
             results: Results dictionary to update
         """
         for smell_name, pattern in self.security_patterns.items():
-            matches = re.finditer(pattern, content, re.MULTILINE)
-            for match in matches:
-                line_no = content[:match.start()].count('\n') + 1
-                context = self._get_context(content, match.start(), 20)
-                finding = f"{smell_name} (line {line_no}): {context.strip()}"
-                results['security_smells'].add(finding)
+            try:
+                matches = re.finditer(pattern, content, re.MULTILINE)
+                for match in matches:
+                    line_no = content[:match.start()].count('\n') + 1
+                    context = self._get_context(content, match.start(), 20)
+                    finding = f"{smell_name} (line {line_no}): {context.strip()}"
+                    results['security_smells'].add(finding)
+            except re.error as e:
+                logging.warning(f"Skipping invalid security regex '{smell_name}': {e}")
     
     def _detect_frameworks(self, content: str, results: Dict[str, Set[str]]) -> None:
         """
@@ -214,8 +217,11 @@ class JavaScriptCodeAnalyzer(AnalyzerPlugin):
             results: Results dictionary to update
         """
         for framework, pattern in self.framework_patterns.items():
-            if re.search(pattern, content, re.MULTILINE):
-                results['api_framework'].add(f"JavaScript framework: {framework}")
+            try:
+                if re.search(pattern, content, re.MULTILINE):
+                    results['api_framework'].add(f"JavaScript framework: {framework}")
+            except re.error as e:
+                logging.warning(f"Skipping invalid framework regex for {framework}: {e}")
     
     def _detect_commented_code(self, content: str, results: Dict[str, Set[str]]) -> None:
         """
@@ -290,7 +296,7 @@ class JavaScriptCodeAnalyzer(AnalyzerPlugin):
         # Additional complexity metrics
         
         # Check cyclomatic complexity by counting decision points
-        decision_points = len(re.findall(r'\b(?:if|else|for|while|do|switch|case|catch|?)\b', content))
+        decision_points = len(re.findall(r'\b(?:if|else|for|while|do|switch|case|catch)\b', content))
         if decision_points > 50:  # Arbitrary threshold for file level
             results['code_complexity'].add(f"High cyclomatic complexity with {decision_points} decision points")
         

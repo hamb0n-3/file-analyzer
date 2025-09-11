@@ -47,7 +47,7 @@ class PythonCodeAnalyzer(AnalyzerPlugin):
         Returns:
             True if this plugin can analyze the file, False otherwise
         """
-        return file_path.suffix.lower() in {'.py', '.pyw'} or file_type == 'text'
+        return file_path.suffix.lower() in {'.py', '.pyw'}
     
     def analyze(self, file_path: Path, file_type: str, content: str, results: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
         """
