@@ -66,7 +66,7 @@ def parse_arguments():
     input_group.add_argument('--dir', help='Analyze all files in directory (recursively)')
     input_group.add_argument('--exclude', action='append', help='Exclude file pattern (glob syntax, can be used multiple times)')
     input_group.add_argument('--include', action='append', help='Include only file pattern (glob syntax, can be used multiple times)')
-    input_group.add_argument('--max-size', type=int, default=100, help='Maximum file size to analyze in MB (default: 50)')
+    input_group.add_argument('--max-size', type=int, default=100, help='Maximum file size to analyze in MB (default: 100)')
     input_group.add_argument('--max-files', type=int, default=1000, help='Maximum number of files to analyze (default: 1000)')
     
     output_group = parser.add_argument_group('Output Options')

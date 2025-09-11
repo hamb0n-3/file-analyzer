@@ -73,8 +73,12 @@ class FileAnalyzer:
         # Initialize plugin registry
         self.plugin_registry = PluginRegistry()
         
-        # Set default memory limit (80% of available memory)
-        self.memory_limit = self.config.get('memory_limit', int(0.8 * resource.getrusage(resource.RUSAGE_SELF).ru_maxrss))
+        # Set memory limit in bytes. Prefer configured value; else use ~50% of system RAM.
+        # Note: resource.getrusage().ru_maxrss is peak RSS and platform-dependent units,
+        # so we avoid basing limits on it.
+        self.memory_limit = self.config.get('memory_limit', None)
+        if not isinstance(self.memory_limit, int):
+            self.memory_limit = int(0.5 * self._get_total_memory_bytes())
         
         # Set default timeout (5 minutes)
         self.timeout = self.config.get('timeout', 300)
@@ -347,10 +351,12 @@ class FileAnalyzer:
                 continue
             
             try:
-                # Check for excessive memory usage
-                current_memory = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                # Check for excessive memory usage (use current RSS in bytes)
+                current_memory = self._get_current_rss_bytes()
                 if current_memory > self.memory_limit:
-                    raise MemoryLimitExceeded(f"Memory usage exceeded: {current_memory} > {self.memory_limit}")
+                    raise MemoryLimitExceeded(
+                        f"{current_memory // (1024*1024)}MB > {self.memory_limit // (1024*1024)}MB"
+                    )
                 
                 # Pattern matching with timeout prevention
                 matches = self._safe_pattern_match(compiled_pattern, content)
@@ -381,18 +387,49 @@ class FileAnalyzer:
                 self.results['runtime_errors'].add(f"Pattern error ({data_type}): {str(e)}")
     
     def _safe_pattern_match(self, pattern, content):
-        """Safely perform pattern matching with protection against catastrophic backtracking."""
+        """Safely perform pattern matching without materializing all results at once."""
         if isinstance(pattern, str):
             try:
                 pattern = re.compile(pattern, re.MULTILINE | re.DOTALL)
             except re.error:
-                return []
+                return iter(())
         
-        # Use finditer with timeout protection
+        # Use finditer to stream matches and avoid large intermediate lists
         try:
-            return list(pattern.finditer(content))
+            return pattern.finditer(content)
         except re.error:
-            return []
+            return iter(())
+
+    def _get_total_memory_bytes(self) -> int:
+        """Best-effort retrieval of total system memory in bytes."""
+        try:
+            import psutil  # type: ignore
+            return int(psutil.virtual_memory().total)
+        except Exception:
+            # Fallback to POSIX sysconf if available
+            try:
+                page_size = os.sysconf('SC_PAGE_SIZE')  # bytes
+                phys_pages = os.sysconf('SC_PHYS_PAGES')
+                return int(page_size * phys_pages)
+            except Exception:
+                # Conservative default: 1 GiB
+                return 1 * 1024 * 1024 * 1024
+
+    def _get_current_rss_bytes(self) -> int:
+        """Best-effort retrieval of current process RSS memory usage in bytes."""
+        try:
+            import psutil  # type: ignore
+            return int(psutil.Process(os.getpid()).memory_info().rss)
+        except Exception:
+            try:
+                rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                # ru_maxrss units: kilobytes on Linux, bytes on macOS. Heuristic conversion.
+                if os.uname().sysname == 'Darwin':
+                    return int(rss)
+                else:
+                    return int(rss) * 1024
+            except Exception:
+                return 0
     
     def _validate_ipv4(self, value: str, data_type: str) -> None:
         """
