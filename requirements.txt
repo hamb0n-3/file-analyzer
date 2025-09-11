@@ -1,0 +1,28 @@
+# Requirements for file-analyzer
+# Install with: pip install -r Scripts/Red/file-analyzer/requirements.txt
+
+# Core runtime
+colorama>=0.4.6
+tqdm>=4.65.0
+
+# Code analysis features
+astroid>=2.11.0
+radon>=5.1.0
+
+# Binary analysis features
+pefile>=2023.2.7
+pyelftools>=0.29
+macholib>=1.16
+python-magic>=0.4.27 ; platform_system != "Windows"
+python-magic-bin>=0.4.14 ; platform_system == "Windows"
+
+# Machine learning features
+scikit-learn>=1.0.0
+joblib>=1.1.0
+
+# NLP features
+spacy>=3.4.0
+
+# After installing, for spaCy language model run:
+# python -m spacy download en_core_web_sm
+
