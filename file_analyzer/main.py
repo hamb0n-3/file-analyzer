@@ -20,6 +20,7 @@ from .utils.output_formatter import (
     format_dir_summary,
     create_dir_summary_html,
     export_dir_summary_json,
+    aggregate_results_by_plugin,
 )
 
 
@@ -50,8 +51,11 @@ def parse_arguments():
   {colors['cyan']('Analyze multiple files:')}
     file-analyzer file ./a.py ./b.js ./c.xml
 
-  {colors['cyan']('Analyze a directory:')}
+  {colors['cyan']('Analyze a directory (non-recursive):')}
     file-analyzer dir ./project_folder
+
+  {colors['cyan']('Analyze a directory recursively:')}
+    file-analyzer dir -r ./project_folder
 
   {colors['cyan']('Enable specific plugins:')}
     file-analyzer file ./example.js --plugins code,api
@@ -64,7 +68,7 @@ def parse_arguments():
 
   {colors['cyan']('Python module usage (legacy):')}
     python -m file_analyzer example.js
-    python -m file_analyzer --dir ./project_folder
+    python -m file_analyzer --dir ./project_folder   {colors['yellow']('(recursive by default)')}
     """
     
     parser = argparse.ArgumentParser(
@@ -101,13 +105,13 @@ def parse_arguments():
     file_p.add_argument('--summary-only', action='store_true', help='Show only summary information')
 
     # dir subcommand
-    dir_p = subparsers.add_parser('dir', help='Analyze all files in a directory')
-    dir_p.add_argument('path', help='Directory to analyze (recursively)')
+    dir_p = subparsers.add_parser('dir', help='Analyze files in a directory (use -r to recurse)')
+    dir_p.add_argument('path', help='Directory to analyze')
+    dir_p.add_argument('-r', '--recursive', action='store_true', help='Recurse into subdirectories')
     dir_p.add_argument('--plugins', help='Comma-separated plugins to enable (e.g., code,api,network,json,xml,secret,all)')
     dir_p.add_argument('--exclude', action='append', help='Exclude file pattern (glob syntax, can be used multiple times)')
     dir_p.add_argument('--include', action='append', help='Include only file pattern (glob syntax, can be used multiple times)')
     dir_p.add_argument('--max-size', type=int, default=100, help='Maximum file size to analyze in MB (default: 100)')
-    dir_p.add_argument('--max-files', type=int, default=1000, help='Maximum number of files to analyze (default: 1000)')
     dir_p.add_argument('--md', action='store_true', help='Output in markdown format (wrapped in triple backticks)')
     dir_p.add_argument('--json', help='Export results to JSON file (per-file when multiple)')
     dir_p.add_argument('--html', help='Export results to HTML report (per-file when multiple)')
@@ -172,7 +176,6 @@ def get_files_to_analyze(args) -> List[Path]:
         List of file paths to analyze
     """
     files_to_analyze = []
-    max_files = getattr(args, 'max_files', 1000)
     max_size_mb = getattr(args, 'max_size', 100)
     try:
         max_size_mb = int(max_size_mb)
@@ -195,7 +198,7 @@ def get_files_to_analyze(args) -> List[Path]:
             else:
                 logging.error(f"File not found: {path}")
     
-    # Process directory recursively
+    # Process directory (optionally recursively)
     if getattr(args, 'dir', None):
         dir_path = Path(args.dir)
         if not dir_path.exists() or not dir_path.is_dir():
@@ -205,49 +208,54 @@ def get_files_to_analyze(args) -> List[Path]:
             include_patterns = args.include if args.include else ["*"]
             exclude_patterns = args.exclude if args.exclude else []
 
-            # Default directories to exclude to prevent slowdowns and hangs
-            default_exclude_dirs = {
-                '.git', 'node_modules', 'venv', '.venv', '__pycache__',
-                '.mypy_cache', '.pytest_cache', 'site-packages', 'dist', 'build',
-                '.idea', '.vscode', '.tox', '.eggs'
-            }
-            
-            # Walk directory recursively
-            for root, dirnames, files in os.walk(dir_path):
-                # Prune heavy/irrelevant directories early
-                dirnames[:] = [d for d in dirnames if d not in default_exclude_dirs]
-                root_path = Path(root)
-                
-                for file in files:
-                    file_path = root_path / file
-                    
-                    # Skip non-regular files (e.g., sockets, device files)
-                    try:
+            # Determine recursion behavior: default recursive for legacy --dir usage
+            recursive = getattr(args, 'recursive', True)
+
+            if recursive:
+                # Default directories to exclude to prevent slowdowns and hangs
+                default_exclude_dirs = {
+                    '.git', 'node_modules', 'venv', '.venv', '__pycache__',
+                    '.mypy_cache', '.pytest_cache', 'site-packages', 'dist', 'build',
+                    '.idea', '.vscode', '.tox', '.eggs'
+                }
+                # Walk directory recursively
+                for root, dirnames, files in os.walk(dir_path):
+                    # Prune heavy/irrelevant directories early
+                    dirnames[:] = [d for d in dirnames if d not in default_exclude_dirs]
+                    root_path = Path(root)
+                    for file in files:
+                        file_path = root_path / file
+                        # Skip non-regular files (e.g., sockets, device files)
+                        try:
+                            if not file_path.is_file():
+                                continue
+                        except Exception:
+                            continue
+                        # Skip files that are too large
+                        if file_path.stat().st_size > max_size_bytes:
+                            logging.debug(f"Skipping {file_path}: exceeds maximum file size")
+                            continue
+                        # Check include/exclude patterns
+                        include_match = any(file_path.match(pattern) for pattern in include_patterns)
+                        exclude_match = any(file_path.match(pattern) for pattern in exclude_patterns)
+                        if include_match and not exclude_match:
+                            files_to_analyze.append(file_path)
+            else:
+                # Non-recursive: only immediate files in directory
+                try:
+                    for file in dir_path.iterdir():
+                        file_path = file
                         if not file_path.is_file():
                             continue
-                    except Exception:
-                        continue
-                    
-                    # Skip files that are too large
-                    if file_path.stat().st_size > max_size_bytes:
-                        logging.debug(f"Skipping {file_path}: exceeds maximum file size")
-                        continue
-                    
-                    # Check include/exclude patterns
-                    include_match = any(file_path.match(pattern) for pattern in include_patterns)
-                    exclude_match = any(file_path.match(pattern) for pattern in exclude_patterns)
-                    
-                    if include_match and not exclude_match:
-                        files_to_analyze.append(file_path)
-                        
-                        # Check if we've reached the maximum number of files
-                        if len(files_to_analyze) >= max_files:
-                            logging.warning(f"Reached maximum file limit ({max_files})")
-                            break
-                
-                # Check again after processing each directory
-                if len(files_to_analyze) >= max_files:
-                    break
+                        if file_path.stat().st_size > max_size_bytes:
+                            logging.debug(f"Skipping {file_path}: exceeds maximum file size")
+                            continue
+                        include_match = any(file_path.match(pattern) for pattern in include_patterns)
+                        exclude_match = any(file_path.match(pattern) for pattern in exclude_patterns)
+                        if include_match and not exclude_match:
+                            files_to_analyze.append(file_path)
+                except Exception as e:
+                    logging.error(f"Error listing directory {dir_path}: {e}")
     
     return files_to_analyze
 
@@ -408,31 +416,55 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args):
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Process each file's results
-    for file_path_str, results in all_results.items():
-        file_path = Path(file_path_str)
-        
-        # Generate output paths
-        if args.json:
-            if len(all_results) > 1:
-                json_path = generate_output_path(args, file_path, ".json")
+    # If analyzing a directory, aggregate per-plugin rather than per-file
+    if getattr(args, 'command', None) == 'dir' and len(all_results) > 1:
+        try:
+            out_dir = Path(args.output_dir) if args.output_dir else Path.cwd()
+            out_dir.mkdir(parents=True, exist_ok=True)
+
+            plugin_buckets = aggregate_results_by_plugin(all_results)
+            if not plugin_buckets:
+                logging.info("No plugin-group findings to export.")
             else:
-                json_path = args.json
-            export_results_json(results, json_path)
-        
-        if args.html:
-            if len(all_results) > 1:
-                html_path = generate_output_path(args, file_path, ".html")
-            else:
-                html_path = args.html
-            create_html_report(results, None, html_path)
-        
-        if args.csv:
-            if len(all_results) > 1:
-                csv_path = generate_output_path(args, file_path, ".csv")
-            else:
-                csv_path = args.csv
-            create_csv_report(results, csv_path)
+                for plugin_name, agg_results in plugin_buckets.items():
+                    base = out_dir / f"plugin-{plugin_name}"
+                    if args.json:
+                        export_results_json(agg_results, str(base.with_suffix('.json')))
+                    if args.html:
+                        create_html_report(agg_results, None, str(base.with_suffix('.html')))
+                    if args.csv:
+                        create_csv_report(agg_results, str(base.with_suffix('.csv')))
+                logging.info(
+                    f"Wrote plugin-aggregated reports: {', '.join(sorted(plugin_buckets.keys()))}"
+                )
+        except Exception as e:
+            logging.warning(f"Failed to write plugin-aggregated reports: {e}")
+    else:
+        # Process each file's results (single-file mode or explicit file list)
+        for file_path_str, results in all_results.items():
+            file_path = Path(file_path_str)
+
+            # Generate output paths
+            if args.json:
+                if len(all_results) > 1:
+                    json_path = generate_output_path(args, file_path, ".json")
+                else:
+                    json_path = args.json
+                export_results_json(results, json_path)
+
+            if args.html:
+                if len(all_results) > 1:
+                    html_path = generate_output_path(args, file_path, ".html")
+                else:
+                    html_path = args.html
+                create_html_report(results, None, html_path)
+
+            if args.csv:
+                if len(all_results) > 1:
+                    csv_path = generate_output_path(args, file_path, ".csv")
+                else:
+                    csv_path = args.csv
+                create_csv_report(results, csv_path)
     
     # If we have multiple files, create a directory summary report
     if len(all_results) > 1 and getattr(args, 'command', None) == 'dir':

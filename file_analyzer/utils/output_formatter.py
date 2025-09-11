@@ -170,6 +170,79 @@ def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] =
 def _count_findings(results: Dict[str, Set[str]]) -> int:
     return sum(len(values) for key, values in results.items() if isinstance(values, set) and key not in ('file_metadata',))
 
+def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> Dict[str, Dict[str, Set[str]]]:
+    """Aggregate multi-file results into plugin-group buckets.
+
+    Returns a dict: plugin_group -> aggregated results dict (sets merged across files).
+    Plugin groups roughly correspond to the plugin types/tags in the system.
+    """
+    # Define mapping of data types to plugin groups
+    code_types = {
+        'code_complexity', 'security_smells', 'code_quality', 'commented_code', 'deprecated_api'
+    }
+    network_types = {
+        'ipv4', 'ipv6', 'domain_keywords', 'url', 'mac_address',
+        'network_protocols', 'network_security_issues', 'network_ports',
+        'network_hosts', 'network_endpoints', 'firewall_rule'
+    }
+    api_types = {
+        'api_endpoint', 'api_method', 'content_type', 'api_version', 'api_parameter',
+        'authorization_header', 'rate_limit', 'api_key_param', 'curl_command', 'webhook_url',
+        'http_status_code', 'rest_resource', 'path_parameter', 'query_parameter', 'request_header',
+        'request_body_json', 'form_data', 'api_request_examples', 'successful_json_request',
+        'failed_json_request', 'api_framework', 'openapi_schema', 'graphql_query', 'graphql_schema',
+        'soap_wsdl', 'api_auth_scheme', 'oauth_flow', 'api_security_header', 'api_doc_comment',
+        'swagger_annotation', 'openapi_tag', 'webhook_event', 'pagination', 'rate_limit_header', 'caching_header',
+        # Common auth/key artifacts often found alongside API usage
+        'jwt', 'access_token', 'refresh_token', 'oauth_token', 'api_token', 'auth_token', 'api_key',
+    }
+    data_types = {
+        # Encoded/serialized and PII-esque items typically harvested from JSON/XML
+        'base64_encoded', 'hex_encoded', 'url_encoded', 'compressed_data', 'serialized_data',
+        'email', 'phone_number', 'personal_id', 'passport_number', 'xml_response'
+    }
+    crypto_types = {
+        'private_key', 'public_key', 'hash', 'encryption_key', 'certificate', 'signature'
+    }
+    ml_types = {
+        'ml_credential_findings', 'ml_api_findings', 'ml_security_findings'
+    }
+
+    groups: Dict[str, Dict[str, Set[str]]] = {
+        'code': {}, 'api': {}, 'network': {}, 'data': {}, 'crypto': {}, 'ml': {}, 'other': {}
+    }
+
+    def bucket_for(dtype: str) -> str:
+        if dtype in code_types:
+            return 'code'
+        if dtype in api_types:
+            return 'api'
+        if dtype in network_types:
+            return 'network'
+        if dtype in data_types:
+            return 'data'
+        if dtype in crypto_types:
+            return 'crypto'
+        if dtype in ml_types:
+            return 'ml'
+        # exclude meta/runtime buckets from aggregation
+        if dtype in {'file_metadata', 'runtime_errors'}:
+            return ''
+        return 'other'
+
+    for file_res in all_results.values():
+        for dtype, values in file_res.items():
+            if not isinstance(values, set) or not values:
+                continue
+            grp = bucket_for(dtype)
+            if not grp:
+                continue
+            bucket = groups.setdefault(grp, {})
+            bucket.setdefault(dtype, set()).update(values)
+
+    # Remove empty groups
+    return {k: v for k, v in groups.items() if any(isinstance(s, set) and s for s in v.values())}
+
 def format_dir_summary(all_results: Dict[str, Dict[str, Set[str]]], root: Optional[Path] = None,
                        colors: Optional[Dict] = None) -> str:
     """

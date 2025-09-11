@@ -204,23 +204,32 @@ class FileAnalyzer:
             
             # Check file size to determine processing method
             file_size = file_path.stat().st_size
-            
-            # Implement memory safety check
-            if file_size > self.memory_limit:
-                logging.warning(f"File size ({file_size} bytes) exceeds safe memory limit, using chunked processing")
-                self._chunked_analyze(file_path, file_type)
-            elif file_size > 10 * 1024 * 1024:  # 10MB
-                # For large files, use parallel processing
-                self.analyze_file_parallel(file_path, file_type)
-            else:
-                # For smaller files, use standard processing
+
+            # Only run text-oriented analysis for text-like files
+            if file_type != 'text':
+                # Read minimal content (if any) to allow specialized plugins; skip generic pattern scan
                 content, is_binary = read_file_content(file_path)
-                
-                # Process the file with built-in pattern matching
-                self._process_patterns(content)
-                
-                # Process with registered plugins
-                self._process_with_plugins(file_path, file_type, content)
+                if is_binary or not content:
+                    logging.info(f"Skipping text pattern scan for non-text file: {file_type}")
+                # Allow plugins that explicitly handle this file type to run
+                self._process_with_plugins(file_path, file_type, content or "")
+            else:
+                # Implement memory safety check
+                if file_size > self.memory_limit:
+                    logging.warning(
+                        f"File size ({file_size} bytes) exceeds safe memory limit, using chunked processing"
+                    )
+                    self._chunked_analyze(file_path, file_type)
+                elif file_size > 10 * 1024 * 1024:  # 10MB
+                    # For large files, use parallel processing
+                    self.analyze_file_parallel(file_path, file_type)
+                else:
+                    # For smaller files, use standard processing
+                    content, is_binary = read_file_content(file_path)
+                    # Process the file with built-in pattern matching
+                    self._process_patterns(content)
+                    # Process with registered plugins
+                    self._process_with_plugins(file_path, file_type, content)
             
             # Clear timeout
             signal.alarm(0)

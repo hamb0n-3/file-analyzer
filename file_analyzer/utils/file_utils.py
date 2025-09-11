@@ -6,39 +6,61 @@ import json
 from pathlib import Path
 from typing import Tuple, Optional
 
+
+def _looks_like_text(sample: bytes, threshold: float = 0.30) -> bool:
+    """
+    Heuristic to determine if a byte sample looks like text.
+
+    - Reject if NUL bytes present
+    - Compute ratio of non-printable bytes; consider text if below threshold
+    """
+    if not sample:
+        return True
+    if b"\x00" in sample:
+        return False
+    # bytes considered printable (ASCII range + common whitespace)
+    printable = set(range(32, 127)) | {9, 10, 13}
+    nonprintable = sum(1 for b in sample if b not in printable)
+    ratio = nonprintable / max(1, len(sample))
+    return ratio <= threshold
+
 def read_file_content(file_path: Path) -> Tuple[str, bool]:
     """
-    Read the content of a file with proper error handling.
-    
-    Args:
-        file_path: Path to the file
-        
-    Returns:
-        Tuple of (file_content, is_binary)
+    Read the content of a file with proper error handling and binary detection.
+
+    Returns (content, is_binary). For binary files, returns an empty string for
+    content to avoid producing meaningless blob output downstream.
     """
-    is_binary = False
-    
     try:
-        # Try reading as text first
-        with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-            
-        # Special handling for JSON files
+        # Read a small sample to detect binary content reliably
+        with open(file_path, 'rb') as fb:
+            head = fb.read(8192)
+        if not _looks_like_text(head):
+            # Treat as binary; do not return hex dumps that create noisy matches
+            return "", True
+
+        # Looks like text: decode whole file as UTF-8 with replacement for safety
+        with open(file_path, 'r', encoding='utf-8', errors='ignore') as ft:
+            content = ft.read()
+
+        # Special handling for JSON files: pretty round-trip to normalize
         if file_path.suffix.lower() == '.json':
             try:
-                # Try to parse as JSON
                 json_content = json.loads(content)
                 content = json.dumps(json_content)
             except json.JSONDecodeError as json_err:
-                logging.warning(f"File {file_path} has invalid JSON syntax at {json_err}. Processing as text.")
-    
-    except UnicodeDecodeError:
-        # If we hit decoding errors, it might be binary
-        is_binary = True
-        with open(file_path, 'rb') as f:
-            content = f.read().hex()
-            
-    return content, is_binary
+                logging.info(
+                    f"File {file_path} has invalid JSON syntax at {json_err}. Processing as text."
+                )
+        return content, False
+    except Exception as e:
+        # As a last resort, try text read; if that fails, treat as binary
+        try:
+            with open(file_path, 'r', encoding='utf-8', errors='ignore') as ft:
+                return ft.read(), False
+        except Exception:
+            logging.debug(f"Failed to read {file_path} as text: {e}")
+            return "", True
 
 def detect_file_type(file_path: Path) -> str:
     """
