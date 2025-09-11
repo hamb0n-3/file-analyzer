@@ -13,7 +13,13 @@ from typing import Dict, Any, Optional, List, Set
 from .core.analyzer import FileAnalyzer
 from .utils.dependency_checker import check_dependencies, generate_requirements_file, setup_colored_output
 from .utils.output_formatter import (
-    format_results, export_results_json, create_html_report, create_csv_report
+    format_results,
+    export_results_json,
+    create_html_report,
+    create_csv_report,
+    format_dir_summary,
+    create_dir_summary_html,
+    export_dir_summary_json,
 )
 
 
@@ -428,10 +434,17 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args):
                 csv_path = args.csv
             create_csv_report(results, csv_path)
     
-    # If we have multiple files, create a summary report
-    if len(all_results) > 1:
-        # TODO: Implement a summary report for multiple files
-        logging.info("Multiple files analyzed, consider using --summary-only for overview")
+    # If we have multiple files, create a directory summary report
+    if len(all_results) > 1 and getattr(args, 'command', None) == 'dir':
+        try:
+            out_dir = Path(args.output_dir) if args.output_dir else Path.cwd()
+            out_dir.mkdir(parents=True, exist_ok=True)
+            # JSON and HTML summaries
+            export_dir_summary_json(all_results, str(out_dir / 'summary.json'), root=Path(getattr(args, 'path', args.dir)))
+            create_dir_summary_html(all_results, str(out_dir / 'summary.html'), root=Path(getattr(args, 'path', args.dir)))
+            logging.info("Wrote directory summaries: summary.json, summary.html")
+        except Exception as e:
+            logging.warning(f"Failed to write directory summary: {e}")
 
 
 def main():
@@ -556,6 +569,11 @@ def main():
         print(f"{colors['green']('Total findings:')} {total_findings}")
         print(f"{colors['green']('Time elapsed:')} {elapsed_time:.2f} seconds")
         
+        # Directory-grouped summary for dir scans
+        if getattr(args, 'command', None) == 'dir':
+            root = Path(getattr(args, 'path', args.dir)) if getattr(args, 'path', None) or getattr(args, 'dir', None) else None
+            print("\n" + format_dir_summary(all_results, root=root, colors=colors))
+
         # Print detailed results for each file
         if not args.summary_only:
             for file_path_str, results in all_results.items():

@@ -18,6 +18,8 @@ class PythonCodeAnalyzer(AnalyzerPlugin):
         super().__init__(config)
         self.tags = {"code", "python"}
         self.security_patterns = get_language_security_patterns().get('python', {})
+        # Needs full source for AST/metrics
+        self.requires_full_content = True
 
     @property
     def plugin_type(self) -> str:
@@ -32,6 +34,18 @@ class PythonCodeAnalyzer(AnalyzerPlugin):
 
     def analyze(self, file_path: Path, file_type: str, content: str, results: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
         logging.info(f"Analyzing Python code in {file_path}")
+
+        # Heuristic: if shebang indicates Python 2, avoid AST parse noise
+        head = content[:128]
+        if "python2" in head or "python 2" in head:
+            logging.info("Detected Python 2 shebang or marker; skipping AST checks")
+            results.setdefault('code_quality', set()).add(
+                "Detected Python 2.x source; AST-based checks skipped"
+            )
+            # Still run regex-based security pattern checks
+            self._check_security_patterns(content, results)
+            return results
+
         try:
             tree = ast.parse(content)
             self._check_security_patterns(content, results)
@@ -39,9 +53,21 @@ class PythonCodeAnalyzer(AnalyzerPlugin):
             self._analyze_ast_security(tree, content, results)
             return results
         except SyntaxError as e:
+            # Reduce console noise and still salvage regex findings
+            self._check_security_patterns(content, results)
             line_no = getattr(e, 'lineno', '?')
-            results.setdefault('code_quality', set()).add(f"Python syntax error at line {line_no}: {str(e)}")
-            logging.warning(f"Syntax error in {file_path}: {str(e)}")
+            msg = str(e)
+            # Friendly hint for common Python 2 print syntax
+            if 'Missing parentheses in call to' in msg and 'print' in msg:
+                results.setdefault('code_quality', set()).add(
+                    f"Likely Python 2 print syntax (line {line_no})"
+                )
+                logging.info(f"Python 2-style print in {file_path}: {msg}")
+            else:
+                results.setdefault('code_quality', set()).add(
+                    f"Python syntax error at line {line_no}: {msg}"
+                )
+                logging.info(f"Syntax error in {file_path}: {msg}")
             return results
         except Exception as e:
             logging.error(f"Error analyzing Python code: {str(e)}")

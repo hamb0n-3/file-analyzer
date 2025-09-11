@@ -23,6 +23,8 @@ class XMLAnalyzer(AnalyzerPlugin):
         super().__init__(config)
         self.tags = {"xml", "data"}
         self._url_re = re.compile(r"https?://[^\s\"']+", re.IGNORECASE)
+        # This plugin relies on full content for structural parsing
+        self.requires_full_content = True
 
     @property
     def plugin_type(self) -> str:
@@ -43,9 +45,18 @@ class XMLAnalyzer(AnalyzerPlugin):
             return results
 
         try:
-            root = ET.fromstring(content)
+            # Quick sanity check: trim BOM/whitespace and ensure it looks like XML
+            trimmed = content.lstrip("\ufeff\n\r\t ")
+            if not trimmed.startswith("<"):
+                logging.info("File does not appear to be XML after trimming; performing text scan fallback")
+                self._scan_text(trimmed, "xml_fallback", results)
+                return results
+
+            root = ET.fromstring(trimmed)
         except Exception as e:
-            logging.warning(f"Failed to parse XML: {e}")
+            # Reduce noise: log at INFO and still perform a lightweight text scan
+            logging.info(f"Failed to parse XML ({file_path}): {e}")
+            self._scan_text(content, "xml_parse_fallback", results)
             return results
 
         # Traverse nodes

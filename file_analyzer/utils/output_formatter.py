@@ -167,6 +167,115 @@ def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] =
     
     return "\n".join(output)
 
+def _count_findings(results: Dict[str, Set[str]]) -> int:
+    return sum(len(values) for key, values in results.items() if isinstance(values, set) and key not in ('file_metadata',))
+
+def format_dir_summary(all_results: Dict[str, Dict[str, Set[str]]], root: Optional[Path] = None,
+                       colors: Optional[Dict] = None) -> str:
+    """
+    Format a directory-grouped summary for console output.
+
+    Args:
+        all_results: map of file path -> results
+        root: optional root path to relativize
+        colors: color functions dict
+    """
+    if colors is None:
+        colors = {k: lambda x: x for k in ["red", "green", "yellow", "blue", "magenta", "cyan", "bold"]}
+
+    # Group files by parent directory
+    grouped: Dict[str, List[Tuple[str, int]]] = {}
+    for file_path_str, res in all_results.items():
+        p = Path(file_path_str)
+        parent = str(p.parent if root is None else p.parent.relative_to(root) if root in p.parents else p.parent)
+        grouped.setdefault(parent, []).append((file_path_str, _count_findings(res)))
+
+    # Sort directories and files
+    out_lines: List[str] = []
+    out_lines.append(colors['bold']('Directory Summary'))
+    total_files = len(all_results)
+    total_findings = sum(cnt for files in grouped.values() for _, cnt in files)
+    out_lines.append(f"{colors['green']('Files:')} {total_files}  {colors['green']('Findings:')} {total_findings}\n")
+
+    for d in sorted(grouped.keys()):
+        files = sorted(grouped[d], key=lambda t: t[0])
+        d_total = sum(cnt for _, cnt in files)
+        out_lines.append(f"{colors['cyan'](d)}  {colors['green']('total:')} {d_total}")
+        for fp, cnt in files:
+            rel = str(Path(fp).relative_to(root)) if root and Path(fp).is_absolute() and root in Path(fp).parents else fp
+            out_lines.append(f"  - {rel}  {colors['blue']('findings:')} {cnt}")
+        out_lines.append("")
+
+    return "\n".join(out_lines)
+
+def create_dir_summary_html(all_results: Dict[str, Dict[str, Set[str]]], output_file: str,
+                            root: Optional[Path] = None) -> None:
+    """Create an HTML directory summary grouped by folders and files."""
+    # Group
+    grouped: Dict[str, List[Tuple[str, int]]] = {}
+    for file_path_str, res in all_results.items():
+        p = Path(file_path_str)
+        parent = str(p.parent if root is None else p.parent.relative_to(root) if root in p.parents else p.parent)
+        grouped.setdefault(parent, []).append((file_path_str, _count_findings(res)))
+
+    total_files = len(all_results)
+    total_findings = sum(cnt for files in grouped.values() for _, cnt in files)
+
+    html = [
+        "<!DOCTYPE html>",
+        "<html><head><meta charset='utf-8'><title>Directory Summary</title>",
+        "<style>body{font-family:Segoe UI,Arial,sans-serif;background:#f8f9fa;color:#333}.wrap{max-width:1100px;margin:0 auto;padding:20px}.card{background:#fff;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.1);padding:16px;margin-bottom:16px}.dir{font-weight:600;color:#007bff}.file{margin-left:12px}.meta{color:#555}</style>",
+        "</head><body><div class='wrap'>",
+        f"<div class='card'><h2>Directory Summary</h2><div class='meta'>Files: {total_files} &nbsp; Findings: {total_findings}</div></div>"
+    ]
+
+    for d in sorted(grouped.keys()):
+        files = sorted(grouped[d], key=lambda t: t[0])
+        d_total = sum(cnt for _, cnt in files)
+        html.append("<div class='card'>")
+        html.append(f"<div class='dir'>{d} <span class='meta'>&mdash; total: {d_total}</span></div>")
+        html.append("<ul>")
+        for fp, cnt in files:
+            rel = str(Path(fp).relative_to(root)) if root and Path(fp).is_absolute() and root in Path(fp).parents else fp
+            html.append(f"<li class='file'>{rel} <span class='meta'>&mdash; findings: {cnt}</span></li>")
+        html.append("</ul>")
+        html.append("</div>")
+
+    html.append("</div></body></html>")
+
+    out_dir = os.path.dirname(output_file)
+    if out_dir and not os.path.exists(out_dir):
+        os.makedirs(out_dir, exist_ok=True)
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write("\n".join(html))
+
+def export_dir_summary_json(all_results: Dict[str, Dict[str, Set[str]]], output_file: str,
+                            root: Optional[Path] = None) -> None:
+    """Export a JSON summary grouped by directory."""
+    # Build structure
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for file_path_str, res in all_results.items():
+        p = Path(file_path_str)
+        parent = str(p.parent if root is None else p.parent.relative_to(root) if root in p.parents else p.parent)
+        grouped.setdefault(parent, []).append({
+            "file": str(Path(file_path_str).relative_to(root)) if root and Path(file_path_str).is_absolute() and root in Path(file_path_str).parents else file_path_str,
+            "total_findings": _count_findings(res)
+        })
+
+    payload = {
+        "summary": {
+            "total_files": len(all_results),
+            "total_findings": sum(item["total_findings"] for files in grouped.values() for item in files)
+        },
+        "directories": grouped
+    }
+
+    out_dir = os.path.dirname(output_file)
+    if out_dir and not os.path.exists(out_dir):
+        os.makedirs(out_dir, exist_ok=True)
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, indent=2)
+
 def _get_severity_class(data_type: str) -> str:
     """
     Determine the severity class for a given data type.

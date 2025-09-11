@@ -11,21 +11,23 @@ def get_patterns() -> Dict[str, str]:
         Dictionary mapping pattern names to regex patterns
     """
     return {
-        'ipv4': r'\b(?:\d{1,3}\.){3}\d{1,3}\b',
+        'ipv4': r'(?<!\d)(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?!\d)',
         'ipv6': r'\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b',
-        'email': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b',
-        'domain_keywords': r'\b(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}\b',
-        'url': r'https?://(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)',
-        'hash': r'\b(?:[a-fA-F0-9]{32}|[a-fA-F0-9]{40}|[a-fA-F0-9]{64}|[a-fA-F0-9]{96}|[a-fA-F0-9]{128}|\$2[ayb]\$[0-9]{2}\$[A-Za-z0-9./]{53})\b',
-        'api_key': r'(?i)(?:api[_-]?key|secret)[=:]\s*[\'"]([^\'"]+)[\'"]',
-        'jwt': r'eyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.?[A-Za-z0-9-_.+/=]*',
+        'mac_address': r'\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b',
+        'email': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}\b',
+        'domain_keywords': r'\b(?:(?=[\w.-]*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}\b',
+        'url': r'https?://[A-Za-z0-9\-._~%]+(?::\d{1,5})?(?:/[^\s\"\'<>]*)?',
+        'hash': r'(?:\$2[ayb]\$[0-9]{2}\$[A-Za-z0-9./]{53})|(?<![A-Fa-f0-9])(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64}|[A-Fa-f0-9]{96}|[A-Fa-f0-9]{128})(?![A-Fa-f0-9])',
+        'api_key': r'(?i)(?:\b(?:api[_-]?key|apikey|apiKey|client[_-]?secret|secret[_-]?key|access[_-]?key)\b)\s*[:=]\s*[\'\"]([^\'\"\s]{8,})[\'\"]',
+        'jwt': r'\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?\b',
         # New patterns for sensitive information
         'username': r'(?i)(?:username|user|login)[=:]\s*[\'"]([^\'"]+)[\'"]',
         'password': r'(?i)(?:password|pass|pwd)[=:]\s*[\'"]([^\'"]+)[\'"]',
         'private_key': r'-----BEGIN (?:RSA|DSA|EC|OPENSSH) PRIVATE KEY-----',
         'public_key': r'-----BEGIN (?:RSA|DSA|EC|OPENSSH) PUBLIC KEY-----',
         'aws_key': r'(?:A3T[A-Z0-9]|AKIA|AGPA|AIDA|AROA|AIPA|ANPA|ANVA|ASIA)[A-Z0-9]{16}',
-        'base64_encoded': r'[A-Za-z0-9+/=]{40,}',
+        # Stricter base64: long runs of valid chars with proper padding; reduces false positives
+        'base64_encoded': r'(?<![A-Za-z0-9+/=])(?:[A-Za-z0-9+/]{4}){10,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?(?![A-Za-z0-9+/=])',
         'credit_card': r'\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b',
         'social_security': r'\b\d{3}-\d{2}-\d{4}\b',
         'database_connection': r'(?i)(?:mysql|postgresql|mongodb|sqlserver)://[^:\s]+:[^@\s]+@[^:\s]+:\d+',
@@ -35,19 +37,21 @@ def get_patterns() -> Dict[str, str]:
         'session_id': r'(?i)(?:session[_-]?id|sid)[=:]\s*[\'"]([^\'"]+)[\'"]',
         'cookie': r'(?i)(?:cookie|session)[=:]\s*[\'"]([^\'"]+)[\'"]',
         # New API-related patterns
-        'api_endpoint': r'(?i)(?:https?://[^/\s]+)?/(?:api|rest|graphql|v\d+)/[^\s"\']+',
+        # Require an explicit scheme to avoid matching arbitrary path-like text
+        'api_endpoint': r'(?i)https?://[^\s"\']+/(?:api(?:/|$)|rest(?:/|$)|graphql(?:/|$)|v\d+/(?:[^\s"\']+))[^\s"\']*',
         'api_method': r'(?i)(?:\'|"|\b)(?:GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)(?:\'|"|\b)',
         'content_type': r'(?i)(?:Content-Type|content-type)[=:]\s*[\'"]([^\'"]+)[\'"]',
         'api_version': r'(?i)(?:v\d+(?:\.\d+)*|\bversion[=:]\s*[\'"]([^\'"]+)[\'"])',
         'api_parameter': r'(?i)(?:[?&][^=\s]+=[^&\s]+)',
         'authorization_header': r'(?i)(?:Authorization|auth)[=:]\s*[\'"]([^\'"]+)[\'"]',
         'rate_limit': r'(?i)(?:rate[_-]?limit|x-rate-limit)[=:]\s*[\'"]?(\d+)[\'"]?',
-        'api_key_param': r'(?i)(?:api_key|apikey|key)=([^&\s]+)',
+        # Only match in query parameter context and require non-trivial value
+        'api_key_param': r'(?i)(?:\?|&)(?:api_key|apikey|key)=([A-Za-z0-9._-]{8,})',
         'curl_command': r'(?i)curl\s+(?:-X\s+(?:GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\s+)?[\'"]?https?://[^\s\'">]+',
         'webhook_url': r'(?i)(?:webhook|callback)[=:]\s*[\'"]?https?://[^\s\'"]+[\'"]?',
         'http_status_code': r'(?i)(?:status|code)[=:]\s*[\'"]?(\d{3})[\'"]?',
-        # OpenAPI/Swagger detection
-        'openapi_schema': r'(?i)(?:\"openapi\"\s*:\s*\"[^\"]*)|(swagger\s*:\s*\"[^\"]*)',
+        # OpenAPI/Swagger detection (stricter)
+        'openapi_schema': r'(?i)(?:\"openapi\"\s*:\s*\"\d+\.\d+\.\d+\"|\"swagger\"\s*:\s*\"\d+\.\d+\")',
         
         # GraphQL patterns
         'graphql_query': r'(?i)(?:query\s+\w+\s*\{[^}]*\}|mutation\s+\w+\s*\{[^}]*\})',

@@ -121,14 +121,20 @@ def is_valid_base64(string: str) -> bool:
         True if valid base64, False otherwise
     """
     import base64
+    import re
     
+    if not string or len(string) < 40:
+        return False
+    # Must be multiple of 4 to be valid standard base64
+    if len(string) % 4 != 0:
+        return False
+    # Valid alphabet and padding (validate=True enforces it too)
+    if not re.fullmatch(r'(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?', string):
+        return False
     try:
-        # Add padding if necessary
-        padding = 4 - (len(string) % 4)
-        if padding != 4:
-            string += '=' * padding
-        # Try to decode
-        base64.b64decode(string)
-        return True
+        decoded = base64.b64decode(string, validate=True)
+        # Re-encode and compare (ignoring trailing '=' differences)
+        reenc = base64.b64encode(decoded).decode('ascii').rstrip('=')
+        return reenc == string.rstrip('=')
     except Exception:
         return False 
