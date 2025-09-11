@@ -8,9 +8,16 @@ from typing import Dict
 
 def to_sarif(report: Dict) -> Dict:
     # Very small SARIF v2.1.0 mapping
+    # rules_loaded is a list of rule_ids after condensation; support old dicts too
     rules = {}
     for r in report.get("rules_loaded", []):
-        rules[r["rule_id"]] = r
+        if isinstance(r, str):
+            rid = r
+            rules[rid] = {"name": rid, "description": "", "severity": None}
+        elif isinstance(r, dict):
+            rid = r.get("rule_id")
+            if rid:
+                rules[rid] = r
 
     results = []
     for f in report.get("findings", []):

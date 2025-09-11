@@ -34,6 +34,11 @@ class PluginRegistry:
             plugin_class: The plugin class to register
             config: Optional configuration dictionary for the plugin
         """
+        # Avoid duplicate registrations within this registry instance
+        key = f"{plugin_class.__module__}.{plugin_class.__name__}"
+        if key in self._plugin_classes:
+            return
+
         # Instantiate the plugin
         plugin = plugin_class(config)
         plugin_type = plugin.plugin_type
@@ -44,9 +49,9 @@ class PluginRegistry:
             
         # Add the plugin to the registry
         self.plugins[plugin_type].append(plugin)
-        self._plugin_classes[plugin_class.__name__] = plugin_class
+        self._plugin_classes[key] = plugin_class
         
-        logging.info(f"Registered {plugin_class.__name__} plugin")
+        logging.debug(f"Registered {plugin_class.__name__} plugin")
         
     def get_plugins_by_type(self, plugin_type: str) -> List[AnalyzerPlugin]:
         """
@@ -88,7 +93,7 @@ class PluginRegistry:
         Args:
             plugin_package: Package path to search for plugins
         """
-        logging.info(f"Discovering plugins in {plugin_package}...")
+        logging.debug(f"Discovering plugins in {plugin_package}...")
         
         # Import the package/module
         package = importlib.import_module(plugin_package)
@@ -126,7 +131,7 @@ class PluginRegistry:
                 except Exception as e:
                     logging.error(f"Error loading plugin from {plugin_package}.{name}: {str(e)}")
                     
-        logging.info(f"Discovered {sum(len(plugins) for plugins in self.plugins.values())} plugins")
+        logging.debug(f"Discovered {sum(len(plugins) for plugins in self.plugins.values())} plugins")
     
     def get_supported_file_types(self) -> Set[str]:
         """

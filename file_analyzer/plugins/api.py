@@ -171,8 +171,6 @@ class APIAnalyzer(AnalyzerPlugin):
                         header_matches = re.finditer(r'-H\s+["\']([^"\']+)["\']|--header\s+["\']([^"\']+)["\']', options)
                         for h_match in header_matches:
                             header = h_match.group(1) or h_match.group(2)
-                            if re.search(r'(?i)authorization|api[-_]?key|token|secret', header):
-                                header = re.sub(r'(?i)(\b(?:authorization|api[-_]?key|token|secret)[^:]*:).*', r'\1 [REDACTED]', header)
                             headers.append(header)
                         if headers:
                             example += "\nHeaders:"
@@ -189,8 +187,6 @@ class APIAnalyzer(AnalyzerPlugin):
                         headers = match.group('headers').strip().split('\n')
                         example += "\nHeaders:"
                         for header in headers:
-                            if re.search(r'(?i)authorization|api[-_]?key|token|secret', header):
-                                header = re.sub(r'(?i)(\b(?:authorization|api[-_]?key|token|secret)[^:]*:).*', r'\1 [REDACTED]', header)
                             if header.strip():
                                 example += f"\n  {header.strip()}"
                     if 'body' in match.groupdict() and match.group('body'):
@@ -202,4 +198,3 @@ class APIAnalyzer(AnalyzerPlugin):
                     results['api_request_examples'].add(example)
                 except Exception as e:
                     logging.warning(f"Error processing API request example: {str(e)}")
-

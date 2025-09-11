@@ -8,8 +8,7 @@ import logging
 import time
 import traceback
 from pathlib import Path
-from typing import Dict, Any, Optional, List
-import concurrent.futures
+from typing import Dict, Any, Optional, List, Set
 
 from .core.analyzer import FileAnalyzer
 from .utils.dependency_checker import check_dependencies, generate_requirements_file, setup_colored_output
@@ -75,7 +74,7 @@ def parse_arguments():
     parser.add_argument('--config', help='Path to configuration file')
     parser.add_argument('--plugin-dir', action='append', help='Additional plugin directory')
     parser.add_argument('--parallel', type=int, default=0, help='Number of parallel workers (0=auto, default: auto)')
-    parser.add_argument('--timeout', type=int, default=300, help='Analysis timeout in seconds per file (default: 300)')
+    parser.add_argument('--timeout', type=int, default=900, help='Analysis timeout in seconds per file (default: 900)')
     parser.add_argument('--memory-limit', type=int, help='Memory limit in MB (default: auto)')
     parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO', help='Set logging level (default: INFO)')
     parser.add_argument('--log-file', default='file_analyzer.log', help='Log file path')
@@ -167,8 +166,13 @@ def get_files_to_analyze(args) -> List[Path]:
         List of file paths to analyze
     """
     files_to_analyze = []
-    max_files = args.max_files
-    max_size_bytes = args.max_size * 1024 * 1024  # Convert MB to bytes
+    max_files = getattr(args, 'max_files', 1000)
+    max_size_mb = getattr(args, 'max_size', 100)
+    try:
+        max_size_mb = int(max_size_mb)
+    except Exception:
+        max_size_mb = 100
+    max_size_bytes = max_size_mb * 1024 * 1024  # Convert MB to bytes
     
     # Process individual files (deprecated path)
     if getattr(args, 'file_paths', None):
@@ -194,13 +198,29 @@ def get_files_to_analyze(args) -> List[Path]:
             # Create include/exclude patterns
             include_patterns = args.include if args.include else ["*"]
             exclude_patterns = args.exclude if args.exclude else []
+
+            # Default directories to exclude to prevent slowdowns and hangs
+            default_exclude_dirs = {
+                '.git', 'node_modules', 'venv', '.venv', '__pycache__',
+                '.mypy_cache', '.pytest_cache', 'site-packages', 'dist', 'build',
+                '.idea', '.vscode', '.tox', '.eggs'
+            }
             
             # Walk directory recursively
-            for root, _, files in os.walk(dir_path):
+            for root, dirnames, files in os.walk(dir_path):
+                # Prune heavy/irrelevant directories early
+                dirnames[:] = [d for d in dirnames if d not in default_exclude_dirs]
                 root_path = Path(root)
                 
                 for file in files:
                     file_path = root_path / file
+                    
+                    # Skip non-regular files (e.g., sockets, device files)
+                    try:
+                        if not file_path.is_file():
+                            continue
+                    except Exception:
+                        continue
                     
                     # Skip files that are too large
                     if file_path.stat().st_size > max_size_bytes:
@@ -263,20 +283,16 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
         else:
             progress_bar = None
             
-        # Create file analyzer instance
-        analyzer = FileAnalyzer(config)
-        
         if num_workers > 1 and total_files > 1:
-            # Process files in parallel
-            with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
-                # Submit analysis tasks
-                future_to_file = {
-                    executor.submit(_analyze_single_file, file_path, config): file_path 
-                    for file_path in files
-                }
-                
-                # Process results as they complete
-                for future in concurrent.futures.as_completed(future_to_file):
+            # Process files in parallel using a persistent process pool
+            from concurrent.futures import ProcessPoolExecutor, as_completed
+            worker_config = dict(config)
+            future_to_file = {}
+            with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                for file_path in files:
+                    future = executor.submit(_analyze_single_file, str(file_path), worker_config)
+                    future_to_file[future] = file_path
+                for future in as_completed(future_to_file):
                     file_path = future_to_file[future]
                     try:
                         file_results = future.result()
@@ -284,17 +300,15 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
                     except Exception as e:
                         logging.error(f"Error analyzing {file_path}: {str(e)}")
                         results[str(file_path)] = {"error": {f"Error: {str(e)}"}}
-                    
-                    # Update progress bar
                     if progress_bar:
                         progress_bar.update(1)
         else:
             # Process files sequentially
             for file_path in files:
                 try:
-                    analyzer.reset_results()
-                    analyzer.analyze_file(str(file_path))
-                    results[str(file_path)] = analyzer.get_results()
+                    fa = FileAnalyzer(config)
+                    fa.analyze_file(str(file_path))
+                    results[str(file_path)] = fa.get_results()
                 except Exception as e:
                     logging.error(f"Error analyzing {file_path}: {str(e)}")
                     results[str(file_path)] = {"error": {f"Error: {str(e)}"}}
@@ -312,16 +326,15 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
         if not args.quiet:
             print(f"Analyzing {total_files} files...")
         
-        analyzer = FileAnalyzer(config)
-        
         for i, file_path in enumerate(files):
             try:
                 if not args.quiet:
                     print(f"[{i+1}/{total_files}] Analyzing {file_path}...")
                 
-                analyzer.reset_results()
-                analyzer.analyze_file(str(file_path))
-                results[str(file_path)] = analyzer.get_results()
+                # Fallback sequential path without subprocess/isolation
+                fa = FileAnalyzer(config)
+                fa.analyze_file(str(file_path))
+                results[str(file_path)] = fa.get_results()
             except Exception as e:
                 logging.error(f"Error analyzing {file_path}: {str(e)}")
                 results[str(file_path)] = {"error": {f"Error: {str(e)}"}}
@@ -350,6 +363,8 @@ def _analyze_single_file(file_path, config):
         tb = traceback.format_exc()
         logging.debug(tb)
         return {"error": {f"Error: {str(e)}"}}
+
+ 
 
 
 def generate_output_path(args, file_path: Path, extension: str) -> str:
@@ -500,7 +515,13 @@ def main():
             try:
                 from .dirscan.dirscan import scan_directory
                 root = Path(getattr(args, 'path', args.dir))
-                secret_scan_data = scan_directory(root=root, include_exts=None, excludes=args.exclude, threads=max(2, args.parallel or 2))
+                secret_scan_data = scan_directory(
+                    root=root,
+                    include_exts=None,
+                    excludes=args.exclude,
+                    threads=max(2, args.parallel or 2),
+                    redact=False
+                )
             except Exception as e:
                 logging.warning(f"Secret scan failed: {e}")
     

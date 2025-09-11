@@ -59,17 +59,26 @@ class PythonCodeAnalyzer(AnalyzerPlugin):
     def _check_code_complexity(self, content: str, results: Dict[str, Set[str]]) -> None:
         try:
             from radon.complexity import cc_visit
-            from radon.metrics import h_visit
+            from radon.metrics import mi_visit
+
+            # Cyclomatic complexity
             complexities = cc_visit(content)
             for item in complexities:
                 if item.complexity > 10:
                     results.setdefault('code_complexity', set()).add(
                         f"High complexity ({item.complexity}) in {item.name} at line {item.lineno}"
                     )
-            h_visit_result = h_visit(content)
-            if h_visit_result.mi < 65:
+
+            # Maintainability Index (0-100)
+            mi_score = mi_visit(content, multi=False)
+            try:
+                mi_value = float(mi_score)
+            except Exception:
+                # If radon returns a non-float (older versions), skip gracefully
+                mi_value = None
+            if mi_value is not None and mi_value < 65:
                 results.setdefault('code_quality', set()).add(
-                    f"Low maintainability index: {h_visit_result.mi:.2f}/100"
+                    f"Low maintainability index: {mi_value:.2f}/100"
                 )
         except ImportError:
             logging.info("Radon not available, skipping complexity analysis")
@@ -152,4 +161,3 @@ class PythonCodeAnalyzer(AnalyzerPlugin):
                 self.generic_visit(node)
 
         SecurityVisitor(content, results).visit(tree)
-

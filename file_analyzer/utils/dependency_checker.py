@@ -294,7 +294,8 @@ def generate_requirements_file(output_path: str = "requirements.txt") -> None:
     
     print(f"{colors['green']('✅ Generated requirements file at')} {output_path}")
     print(f"{colors['blue']('Install all dependencies with:')} pip install -r {output_path}")
-    print(f"{colors['blue']('Don\'t forget to also run:')} python -m spacy download en_core_web_sm")
+    # Avoid f-string expression quoting issues; build message separately
+    print(colors['blue']("Don't forget to also run:") + " python -m spacy download en_core_web_sm")
     
     # Check for platform-specific requirements
     if platform.system() == 'Linux':

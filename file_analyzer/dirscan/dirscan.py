@@ -125,7 +125,7 @@ def _scan_file(p: Path, rules: List[Rule], root: Path, redact: bool, max_file_by
                         redacted=red,
                         secret_hash=fingerprint(candidate),
                         entropy=round(ent,2) if ent is not None else None,
-                        context=line[:m.start()] + "***" + line[m.end():],
+                        context=line,
                         tags=rule.tags or []
                     ))
         # Multi-line patterns (e.g., PEM blocks) – search in whole text
@@ -155,7 +155,7 @@ def _scan_file(p: Path, rules: List[Rule], root: Path, redact: bool, max_file_by
                         redacted=red,
                         secret_hash=fingerprint(candidate),
                         entropy=round(ent,2),
-                        context="*** PEM/JWT block redacted ***",
+                        context=snippet,
                         tags=rule.tags or []
                     ))
         return findings, None
@@ -167,7 +167,7 @@ def scan_directory(
     include_exts: Optional[List[str]] = None,
     excludes: Optional[List[str]] = None,
     threads: int = 8,
-    redact: bool = True,
+    redact: bool = False,
     max_file_bytes: int = 2_000_000
 ) -> Dict:
     start = time.time()
@@ -228,10 +228,7 @@ def scan_directory(
         "summary_by_rule": by_rule,
         "findings": [asdict(f) for f in findings],
         "errors": errors,
-        "rules_loaded": [{
-            "rule_id": r.rule_id, "name": r.name, "description": r.description,
-            "category": r.category, "provider": r.provider, "severity": r.severity
-        } for r in rules]
+        "rules_loaded": [r.rule_id for r in rules]
     }
     return result
 

@@ -79,13 +79,31 @@ class NetworkAnalyzer(AnalyzerPlugin):
                     results.setdefault('network_security_issues', set()).add(f"Hardcoded non-local IP address: {host}")
 
     def _correlate_network_endpoints(self, content: str, results: Dict[str, Set[str]]) -> None:
-        hosts = results.get('network_hosts', set())
-        ports = results.get('network_ports', set())
-        if hosts and ports:
-            for host in hosts:
-                for port in ports:
-                    if re.search(rf'{re.escape(host)}.*?{port}|{port}.*?{re.escape(host)}', content, re.DOTALL):
-                        results.setdefault('network_endpoints', set()).add(f"{host}:{port}")
+        hosts = list(results.get('network_hosts', set()) or [])
+        ports = list(results.get('network_ports', set()) or [])
+        if not hosts or not ports:
+            return
+
+        # Fast-path: literal 'host:port' detection (cheap substring search)
+        endpoints = results.setdefault('network_endpoints', set())
+        max_pairs = 1000  # cap work to avoid O(N*M) blowups
+        pairs_checked = 0
+
+        for host in hosts:
+            for port in ports:
+                if pairs_checked >= max_pairs:
+                    return
+                pairs_checked += 1
+                if f"{host}:{port}" in content:
+                    endpoints.add(f"{host}:{port}")
+                # Only fall back to regex when content is reasonably small
+                elif len(content) <= 200_000:
+                    try:
+                        if re.search(rf'{re.escape(host)}.*?{port}|{port}.*?{re.escape(host)}', content, re.DOTALL):
+                            endpoints.add(f"{host}:{port}")
+                    except re.error:
+                        # Ignore malformed host/port patterns in regex context
+                        pass
 
     def _get_port_service(self, port: int) -> str:
         common_ports = {
@@ -95,4 +113,3 @@ class NetworkAnalyzer(AnalyzerPlugin):
             27017: "MongoDB"
         }
         return common_ports.get(port, "Unknown Service")
-

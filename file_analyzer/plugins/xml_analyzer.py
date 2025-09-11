@@ -45,8 +45,7 @@ class XMLAnalyzer(AnalyzerPlugin):
         try:
             root = ET.fromstring(content)
         except Exception as e:
-            logging.warning(f"Failed to parse XML: {e}
-")
+            logging.warning(f"Failed to parse XML: {e}")
             return results
 
         # Traverse nodes
@@ -82,4 +81,3 @@ class XMLAnalyzer(AnalyzerPlugin):
                     results.setdefault("access_token", set()).add(text.strip())
                 elif "apikey" in lower_ctx or "api_key" in lower_ctx or ("key" in lower_ctx and len(text.strip()) > 16):
                     results.setdefault("api_key", set()).add(text.strip())
-
