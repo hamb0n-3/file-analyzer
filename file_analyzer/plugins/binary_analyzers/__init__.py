@@ -1,2 +1,0 @@
-"""Binary analyzers package marker."""
-

@@ -39,20 +39,27 @@ def parse_arguments():
     """
     
     epilog = f"""examples:
-  {colors['cyan']('Basic analysis:')}
-    python -m file_analyzer example.js
-    
-  {colors['cyan']('Export to different formats:')}
-    python -m file_analyzer example.js --json results.json --html report.html
-    
+  {colors['cyan']('Analyze one file:')}
+    file-analyzer file ./example.js
+
   {colors['cyan']('Analyze multiple files:')}
-    python -m file_analyzer file1.py file2.js file3.xml
-    
+    file-analyzer file ./a.py ./b.js ./c.xml
+
   {colors['cyan']('Analyze a directory:')}
+    file-analyzer dir ./project_folder
+
+  {colors['cyan']('Enable specific plugins:')}
+    file-analyzer file ./example.js --plugins code,api
+    file-analyzer dir ./project --plugins network,secret
+    file-analyzer dir ./project --plugins all
+
+  {colors['cyan']('Export to different formats:')}
+    file-analyzer file ./example.js --json results.json --html report.html
+    file-analyzer dir ./project --output-dir ./out --csv summary.csv
+
+  {colors['cyan']('Python module usage (legacy):')}
+    python -m file_analyzer example.js
     python -m file_analyzer --dir ./project_folder
-    
-  {colors['cyan']('Specify custom configuration:')}
-    python -m file_analyzer example.js --config my_config.json
     """
     
     parser = argparse.ArgumentParser(
@@ -60,40 +67,61 @@ def parse_arguments():
         epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    
-    input_group = parser.add_argument_group('Input Options')
-    input_group.add_argument('file_paths', nargs='*', help='Path(s) to the file(s) to analyze')
-    input_group.add_argument('--dir', help='Analyze all files in directory (recursively)')
-    input_group.add_argument('--exclude', action='append', help='Exclude file pattern (glob syntax, can be used multiple times)')
-    input_group.add_argument('--include', action='append', help='Include only file pattern (glob syntax, can be used multiple times)')
-    input_group.add_argument('--max-size', type=int, default=100, help='Maximum file size to analyze in MB (default: 100)')
-    input_group.add_argument('--max-files', type=int, default=1000, help='Maximum number of files to analyze (default: 1000)')
-    
-    output_group = parser.add_argument_group('Output Options')
-    output_group.add_argument('--md', action='store_true', help='Output in markdown format (wrapped in triple backticks)')
-    output_group.add_argument('--json', help='Export results to JSON file')
-    output_group.add_argument('--html', help='Export results to HTML report')
-    output_group.add_argument('--csv', help='Export results to CSV file')
-    output_group.add_argument('--output-dir', help='Directory to store all output files')
-    output_group.add_argument('--quiet', action='store_true', help='Suppress terminal output')
-    output_group.add_argument('--summary-only', action='store_true', help='Show only summary information')
-    
-    config_group = parser.add_argument_group('Configuration Options')
-    config_group.add_argument('--skip-checks', action='store_true', help='Skip dependency checks (for advanced users)')
-    config_group.add_argument('--requirements', action='store_true', help='Generate requirements.txt file and exit')
-    config_group.add_argument('--version', action='store_true', help='Show version information and exit')
-    config_group.add_argument('--config', help='Path to configuration file')
-    config_group.add_argument('--plugin-dir', action='append', help='Additional plugin directory')
-    config_group.add_argument('--parallel', type=int, default=0, 
-                             help='Number of parallel workers (0=auto, default: auto)')
-    
-    advanced_group = parser.add_argument_group('Advanced Options')
-    advanced_group.add_argument('--timeout', type=int, default=300, help='Analysis timeout in seconds per file (default: 300)')
-    advanced_group.add_argument('--memory-limit', type=int, help='Memory limit in MB (default: auto)')
-    advanced_group.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], 
-                                default='INFO', help='Set logging level (default: INFO)')
-    advanced_group.add_argument('--log-file', default='file_analyzer.log', help='Log file path')
-    
+
+    # Global options
+    parser.add_argument('--skip-checks', action='store_true', help='Skip dependency checks (for advanced users)')
+    parser.add_argument('--requirements', action='store_true', help='Generate requirements.txt file and exit')
+    parser.add_argument('--version', action='store_true', help='Show version information and exit')
+    parser.add_argument('--config', help='Path to configuration file')
+    parser.add_argument('--plugin-dir', action='append', help='Additional plugin directory')
+    parser.add_argument('--parallel', type=int, default=0, help='Number of parallel workers (0=auto, default: auto)')
+    parser.add_argument('--timeout', type=int, default=300, help='Analysis timeout in seconds per file (default: 300)')
+    parser.add_argument('--memory-limit', type=int, help='Memory limit in MB (default: auto)')
+    parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'], default='INFO', help='Set logging level (default: INFO)')
+    parser.add_argument('--log-file', default='file_analyzer.log', help='Log file path')
+
+    # Subcommands
+    subparsers = parser.add_subparsers(dest='command', metavar='command')
+
+    # file subcommand
+    file_p = subparsers.add_parser('file', help='Analyze one or more files')
+    file_p.add_argument('paths', nargs='+', help='Path(s) to file(s) to analyze')
+    file_p.add_argument('--plugins', help='Comma-separated plugins to enable (e.g., code,api,network,json,xml,all)')
+    file_p.add_argument('--md', action='store_true', help='Output in markdown format (wrapped in triple backticks)')
+    file_p.add_argument('--json', help='Export results to JSON file')
+    file_p.add_argument('--html', help='Export results to HTML report')
+    file_p.add_argument('--csv', help='Export results to CSV file')
+    file_p.add_argument('--output-dir', help='Directory to store all output files')
+    file_p.add_argument('--quiet', action='store_true', help='Suppress terminal output')
+    file_p.add_argument('--summary-only', action='store_true', help='Show only summary information')
+
+    # dir subcommand
+    dir_p = subparsers.add_parser('dir', help='Analyze all files in a directory')
+    dir_p.add_argument('path', help='Directory to analyze (recursively)')
+    dir_p.add_argument('--plugins', help='Comma-separated plugins to enable (e.g., code,api,network,json,xml,secret,all)')
+    dir_p.add_argument('--exclude', action='append', help='Exclude file pattern (glob syntax, can be used multiple times)')
+    dir_p.add_argument('--include', action='append', help='Include only file pattern (glob syntax, can be used multiple times)')
+    dir_p.add_argument('--max-size', type=int, default=100, help='Maximum file size to analyze in MB (default: 100)')
+    dir_p.add_argument('--max-files', type=int, default=1000, help='Maximum number of files to analyze (default: 1000)')
+    dir_p.add_argument('--md', action='store_true', help='Output in markdown format (wrapped in triple backticks)')
+    dir_p.add_argument('--json', help='Export results to JSON file (per-file when multiple)')
+    dir_p.add_argument('--html', help='Export results to HTML report (per-file when multiple)')
+    dir_p.add_argument('--csv', help='Export results to CSV file (per-file when multiple)')
+    dir_p.add_argument('--output-dir', help='Directory to store all output files')
+    dir_p.add_argument('--quiet', action='store_true', help='Suppress terminal output')
+    dir_p.add_argument('--summary-only', action='store_true', help='Show only summary information')
+
+    # Backward-compatible options (no subcommand): keep for existing usage
+    parser.add_argument('file_paths', nargs='*', help='[Deprecated] Path(s) to the file(s) to analyze')
+    parser.add_argument('--dir', help='[Deprecated] Analyze all files in directory (recursively)')
+    parser.add_argument('--md', action='store_true', help='Output in markdown format (wrapped in triple backticks)')
+    parser.add_argument('--json', help='Export results to JSON file')
+    parser.add_argument('--html', help='Export results to HTML report')
+    parser.add_argument('--csv', help='Export results to CSV file')
+    parser.add_argument('--output-dir', help='Directory to store all output files')
+    parser.add_argument('--quiet', action='store_true', help='Suppress terminal output')
+    parser.add_argument('--summary-only', action='store_true', help='Show only summary information')
+
     return parser.parse_args()
 
 
@@ -142,8 +170,8 @@ def get_files_to_analyze(args) -> List[Path]:
     max_files = args.max_files
     max_size_bytes = args.max_size * 1024 * 1024  # Convert MB to bytes
     
-    # Process individual files
-    if args.file_paths:
+    # Process individual files (deprecated path)
+    if getattr(args, 'file_paths', None):
         for file_path in args.file_paths:
             path = Path(file_path)
             if path.exists():
@@ -158,7 +186,7 @@ def get_files_to_analyze(args) -> List[Path]:
                 logging.error(f"File not found: {path}")
     
     # Process directory recursively
-    if args.dir:
+    if getattr(args, 'dir', None):
         dir_path = Path(args.dir)
         if not dir_path.exists() or not dir_path.is_dir():
             logging.error(f"Directory not found: {dir_path}")
@@ -430,9 +458,28 @@ def main():
         config['timeout'] = args.timeout
     if args.memory_limit:
         config['memory_limit'] = args.memory_limit * 1024 * 1024  # Convert MB to bytes
+    # Plugin selection via subcommand option or legacy (None -> enable all)
+    enabled_plugins = None
+    if getattr(args, 'plugins', None):
+        enabled_plugins = args.plugins
+    config['enabled_plugins'] = enabled_plugins
     
-    # Get files to analyze
-    files_to_analyze = get_files_to_analyze(args)
+    # Determine mode and inputs
+    files_to_analyze: List[Path] = []
+    mode = None
+    if getattr(args, 'command', None) == 'file':
+        mode = 'file'
+        args.file_paths = args.paths  # bridge to existing logic
+        files_to_analyze = get_files_to_analyze(args)
+    elif getattr(args, 'command', None) == 'dir':
+        mode = 'dir'
+        # bridge: map to legacy --dir
+        setattr(args, 'dir', args.path)
+        files_to_analyze = get_files_to_analyze(args)
+    else:
+        # Backward-compatible path
+        mode = 'file' if args.file_paths else ('dir' if args.dir else None)
+        files_to_analyze = get_files_to_analyze(args)
     
     if not files_to_analyze:
         print(f"{colors['red']('Error: No files specified or found for analysis')}")
@@ -441,9 +488,36 @@ def main():
     
     # Analyze all files
     all_results = analyze_files(files_to_analyze, config, args)
+
+    # Optional: run secret directory scan when requested via plugins on dir mode
+    secret_scan_data = None
+    if mode == 'dir' and getattr(args, 'plugins', None):
+        try:
+            plugin_set = {p.strip().lower() for p in args.plugins.split(',') if p.strip()}
+        except Exception:
+            plugin_set = set()
+        if not plugin_set or 'all' in plugin_set or 'secret' in plugin_set:
+            try:
+                from .dirscan.dirscan import scan_directory
+                root = Path(getattr(args, 'path', args.dir))
+                secret_scan_data = scan_directory(root=root, include_exts=None, excludes=args.exclude, threads=max(2, args.parallel or 2))
+            except Exception as e:
+                logging.warning(f"Secret scan failed: {e}")
     
     # Export results if requested
     export_all_results(all_results, args)
+
+    # If secret scan ran and output dir specified, write a companion JSON
+    if secret_scan_data is not None:
+        try:
+            out_dir = Path(args.output_dir) if args.output_dir else Path.cwd()
+            out_dir.mkdir(parents=True, exist_ok=True)
+            out_path = out_dir / 'secret_scan.json'
+            import json as _json
+            out_path.write_text(_json.dumps(secret_scan_data, indent=2))
+            logging.info(f"Secret scan report written to {out_path}")
+        except Exception as e:
+            logging.warning(f"Failed to write secret scan report: {e}")
     
     # Print results to console if not in quiet mode
     if not args.quiet:
@@ -471,6 +545,13 @@ def main():
                 # Format and print results
                 formatted_results = format_results(results, None, args.md, colors)
                 print(formatted_results)
+
+        # Print secret scan summary if available
+        if secret_scan_data is not None:
+            sev = secret_scan_data.get('summary_by_severity', {})
+            high = sev.get('high', 0) + sev.get('critical', 0)
+            print(f"\n{colors['bold']('Secret Scan Summary')} (dir)")
+            print(f"Findings: {secret_scan_data.get('totals',{}).get('findings',0)}  High/Critical: {high}")
     
     # Return success
     return 0

@@ -1,2 +1,0 @@
-"""API analyzers package marker."""
-

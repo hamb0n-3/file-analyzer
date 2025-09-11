@@ -24,6 +24,9 @@ class AnalyzerPlugin(abc.ABC):
         """
         self.config = config or {}
         self.name = self.__class__.__name__
+        # Optional tags to group plugins for selection (e.g., 'code', 'api')
+        # Subclasses may override or extend this list.
+        self.tags: Set[str] = set()
         
     @property
     @abc.abstractmethod

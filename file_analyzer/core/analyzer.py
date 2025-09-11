@@ -277,6 +277,38 @@ class FileAnalyzer:
         """
         # Get applicable plugins
         applicable_plugins = self.plugin_registry.get_plugins_for_file(file_path, file_type, content)
+
+        # Optional filtering by enabled plugin tags (e.g., code, api, network, json, xml)
+        enabled = set()
+        cfg_enabled = self.config.get('enabled_plugins')
+        if cfg_enabled:
+            # Accept comma-separated string or list
+            if isinstance(cfg_enabled, str):
+                enabled = {t.strip().lower() for t in cfg_enabled.split(',') if t.strip()}
+            elif isinstance(cfg_enabled, (list, set, tuple)):
+                enabled = {str(t).strip().lower() for t in cfg_enabled}
+        if enabled and 'all' not in enabled:
+            def plugin_tags(p) -> set:
+                # Base tags from plugin, plus mapping from type
+                tags = set(getattr(p, 'tags', set()) or set())
+                t = getattr(p, 'plugin_type', '')
+                mapping = {
+                    'code_analyzer': {'code'},
+                    'api_analyzer': {'api'},
+                    'network_analyzer': {'network'},
+                    'binary_analyzer': {'binary'},
+                    'ml_analyzer': {'ml'},
+                    'data_analyzer': set(),  # json/xml use explicit tags
+                }
+                tags |= mapping.get(t, set())
+                # Derive a general tag from class name as a convenience
+                cname = p.__class__.__name__.lower()
+                for k in ('json', 'xml'):
+                    if k in cname:
+                        tags.add(k)
+                return {x.lower() for x in tags}
+
+            applicable_plugins = [p for p in applicable_plugins if plugin_tags(p) & enabled]
         
         for plugin in applicable_plugins:
             try:

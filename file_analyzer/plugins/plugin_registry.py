@@ -90,14 +90,20 @@ class PluginRegistry:
         """
         logging.info(f"Discovering plugins in {plugin_package}...")
         
-        # Import the package
+        # Import the package/module
         package = importlib.import_module(plugin_package)
-        
-        # Get the file path of the package
-        package_path = os.path.dirname(package.__file__)
-        
-        # Walk through all modules in the package
-        for _, name, is_pkg in pkgutil.iter_modules([package_path]):
+
+        # Determine search paths supporting regular and namespace packages
+        search_paths = []
+        if getattr(package, '__file__', None):
+            # Regular package/module
+            search_paths = [os.path.dirname(package.__file__)]
+        elif getattr(package, '__path__', None):
+            # Namespace package
+            search_paths = list(package.__path__)
+
+        # Walk through all modules in the package paths
+        for _, name, is_pkg in pkgutil.iter_modules(search_paths):
             if is_pkg:
                 # If it's a package, recursively discover plugins
                 self.discover_plugins(f"{plugin_package}.{name}")
@@ -118,7 +124,7 @@ class PluginRegistry:
                             # Register the plugin
                             self.register_plugin(attr)
                 except Exception as e:
-                    logging.error(f"Error loading plugin from {name}: {str(e)}")
+                    logging.error(f"Error loading plugin from {plugin_package}.{name}: {str(e)}")
                     
         logging.info(f"Discovered {sum(len(plugins) for plugins in self.plugins.values())} plugins")
     
