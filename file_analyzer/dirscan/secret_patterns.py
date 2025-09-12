@@ -200,6 +200,13 @@ def load_rules() -> List[Rule]:
         Rule("URL_HTTP", "HTTP URL",
              _c(r"(?i)\bhttps?://[^\s\'\"<>]+"),
              "HTTP(S) URL.", "url", None, "low", ["url"]),
+        # Veterans Affairs (va.gov) specific URLs/domains
+        Rule("VA_GOV_URL", "VA.gov URL",
+             _c(r"(?i)\bhttps?://(?:[A-Za-z0-9-]+\.)*va\.gov(?:/[^\s\'\"<>]*)?"),
+             "Veterans Affairs (va.gov) URL.", "url", "VA", "low", ["va.gov","us-gov","url"]),
+        Rule("VA_GOV_DOMAIN", "VA.gov Domain",
+             _c(r"(?i)\b(?:[A-Za-z0-9-]+\.)*va\.gov\b"),
+             "Veterans Affairs (va.gov) domain.", "url", "VA", "low", ["va.gov","us-gov","domain"]),
         Rule("CLOUD_ENDPOINT", "Cloud Endpoint URL",
              _c(r"(?i)\bhttps?://(?:[^/\s]+\.)?(?:amazonaws|azurewebsites|windows|cloudfront|googleapis|appspot|firebaseio|digitaloceanspaces|herokuapp|supabase|vercel|render)\.[^\s\'\"<>]+"),
              "Cloud service endpoint URL.", "url", None, "low", ["cloud","url"]),

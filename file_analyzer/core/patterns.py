@@ -17,6 +17,9 @@ def get_patterns() -> Dict[str, str]:
         'email': r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}\b',
         'domain_keywords': r'\b(?:(?=[\w.-]*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}\b',
         'url': r'https?://[A-Za-z0-9\-._~%]+(?::\d{1,5})?(?:/[^\s\"\'<>]*)?',
+        # Veterans Affairs (va.gov) specific detections
+        'va_gov_domain': r'(?i)\b(?:[A-Za-z0-9-]+\.)*va\.gov\b',
+        'va_gov_url': r'(?i)\bhttps?://(?:[A-Za-z0-9-]+\.)*va\.gov(?:/[^\s\"\'<>]*)?',
         'hash': r'(?:\$2[ayb]\$[0-9]{2}\$[A-Za-z0-9./]{53})|(?<![A-Fa-f0-9])(?:[A-Fa-f0-9]{32}|[A-Fa-f0-9]{40}|[A-Fa-f0-9]{64}|[A-Fa-f0-9]{96}|[A-Fa-f0-9]{128})(?![A-Fa-f0-9])',
         'api_key': r'(?i)(?:\b(?:api[_-]?key|apikey|apiKey|client[_-]?secret|secret[_-]?key|access[_-]?key)\b)\s*[:=]\s*[\'\"]([^\'\"\s]{8,})[\'\"]',
         'jwt': r'\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)?\b',
