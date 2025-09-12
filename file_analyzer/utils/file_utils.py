@@ -62,6 +62,18 @@ def read_file_content(file_path: Path) -> Tuple[str, bool]:
             logging.debug(f"Failed to read {file_path} as text: {e}")
             return "", True
 
+def is_text_like_file(file_path: Path, sample_size: int = 8192) -> bool:
+    """Quickly determine if a file appears to be text using a small sample.
+
+    Returns True for text-like files, False for likely-binary files.
+    """
+    try:
+        with open(file_path, 'rb') as fb:
+            head = fb.read(sample_size)
+        return _looks_like_text(head)
+    except Exception:
+        return False
+
 def detect_file_type(file_path: Path) -> str:
     """
     Detect file type using magic numbers and file extensions.

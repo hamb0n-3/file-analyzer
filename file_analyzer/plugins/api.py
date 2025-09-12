@@ -41,7 +41,7 @@ class APIAnalyzer(AnalyzerPlugin):
         }
 
     def analyze(self, file_path: Path, file_type: str, content: str, results: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
-        logging.info(f"Analyzing API information in {file_path}")
+        logging.debug(f"Analyzing API information in {file_path}")
         self.extract_api_structure(content, results)
         self.detect_api_frameworks(content, results)
         self.extract_api_responses(content, results)

@@ -105,7 +105,7 @@ class JavaScriptCodeAnalyzer(AnalyzerPlugin):
         return False
 
     def analyze(self, file_path: Path, file_type: str, content: str, results: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
-        logging.info(f"Analyzing JavaScript code in {file_path}")
+        logging.debug(f"Analyzing JavaScript code in {file_path}")
         try:
             self._check_security_patterns(content, results)
             self._detect_frameworks(content, results)
@@ -243,4 +243,3 @@ class JavaScriptCodeAnalyzer(AnalyzerPlugin):
         if line_end == -1:
             line_end = len(content)
         return content[line_start:line_end].strip()
-

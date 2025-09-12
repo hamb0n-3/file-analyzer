@@ -18,7 +18,7 @@ import signal
 from functools import lru_cache
 
 from ..plugins.plugin_registry import PluginRegistry
-from ..utils.file_utils import read_file_content, detect_file_type, calculate_entropy
+from ..utils.file_utils import read_file_content, detect_file_type, calculate_entropy, is_text_like_file
 from ..core.patterns import get_patterns, get_hash_patterns
 
 
@@ -170,7 +170,7 @@ class FileAnalyzer:
                     logging.warning(f"Plugin directory does not exist: {plugin_dir}")
             
             loaded_plugins = sum(len(plugins) for plugins in self.plugin_registry.plugins.values())
-            logging.info(f"Loaded {loaded_plugins} plugins")
+            logging.debug(f"Loaded {loaded_plugins} plugins")
         except Exception as e:
             logging.error(f"Error loading plugins: {str(e)}")
     
@@ -200,35 +200,32 @@ class FileAnalyzer:
 
             # Determine file type
             file_type = detect_file_type(file_path)
-            logging.info(f"Detected file type: {file_type}")
+            logging.debug(f"Detected file type: {file_type}")
             
             # Check file size to determine processing method
             file_size = file_path.stat().st_size
 
-            # Only run text-oriented analysis for text-like files
-            if file_type != 'text':
-                # Read minimal content (if any) to allow specialized plugins; skip generic pattern scan
+            # Decide text-like vs binary using both detector and a quick head sample
+            text_like = (file_type == 'text') or is_text_like_file(file_path)
+
+            if not text_like:
+                # Non-text: do not run regex text patterns; allow plugins only
                 content, is_binary = read_file_content(file_path)
                 if is_binary or not content:
-                    logging.info(f"Skipping text pattern scan for non-text file: {file_type}")
-                # Allow plugins that explicitly handle this file type to run
+                    logging.debug(f"Skipping text pattern scan for non-text file: {file_type}")
                 self._process_with_plugins(file_path, file_type, content or "")
             else:
-                # Implement memory safety check
+                # Text-like files: choose appropriate strategy based on size
                 if file_size > self.memory_limit:
                     logging.warning(
                         f"File size ({file_size} bytes) exceeds safe memory limit, using chunked processing"
                     )
                     self._chunked_analyze(file_path, file_type)
                 elif file_size > 10 * 1024 * 1024:  # 10MB
-                    # For large files, use parallel processing
                     self.analyze_file_parallel(file_path, file_type)
                 else:
-                    # For smaller files, use standard processing
                     content, is_binary = read_file_content(file_path)
-                    # Process the file with built-in pattern matching
                     self._process_patterns(content)
-                    # Process with registered plugins
                     self._process_with_plugins(file_path, file_type, content)
             
             # Clear timeout
@@ -321,7 +318,7 @@ class FileAnalyzer:
         
         for plugin in applicable_plugins:
             try:
-                logging.info(f"Applying {plugin.name} plugin")
+                logging.debug(f"Applying {plugin.name} plugin")
                 plugin.analyze(file_path, file_type, content, self.results)
             except Exception as e:
                 logging.error(f"Error in plugin {plugin.name}: {str(e)}")
@@ -342,7 +339,7 @@ class FileAnalyzer:
             chunk_num = 1
             
             while chunk:
-                logging.info(f"Processing chunk {chunk_num} of file {file_path.name}")
+                logging.debug(f"Processing chunk {chunk_num} of file {file_path.name}")
                 
                 # Convert to string for processing
                 content = chunk.decode('utf-8', errors='ignore')
@@ -575,7 +572,7 @@ class FileAnalyzer:
         chunk_size = max(1024 * 1024, file_size // cpu_count)  # At least 1MB
         num_chunks = math.ceil(file_size / chunk_size)
         
-        logging.info(f"Processing large file ({file_size/1024/1024:.2f} MB) in {num_chunks} chunks using {cpu_count} workers")
+        logging.debug(f"Processing large file ({file_size/1024/1024:.2f} MB) in {num_chunks} chunks using {cpu_count} workers")
         
         # Process chunks in parallel
         with ProcessPoolExecutor(max_workers=cpu_count) as executor:
@@ -593,7 +590,7 @@ class FileAnalyzer:
                     chunk_results = future.result()
                     self._merge_chunk_results(chunk_results)
                     completed += 1
-                    logging.info(f"Processed chunk {completed}/{num_chunks}")
+                    logging.debug(f"Processed chunk {completed}/{num_chunks}")
                 except Exception as e:
                     logging.error(f"Error processing chunk: {str(e)}")
                     self.results['runtime_errors'].add(f"Chunk processing error: {str(e)}")

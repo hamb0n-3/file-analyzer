@@ -33,7 +33,7 @@ class PythonCodeAnalyzer(AnalyzerPlugin):
         return file_path.suffix.lower() in {'.py', '.pyw'}
 
     def analyze(self, file_path: Path, file_type: str, content: str, results: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
-        logging.info(f"Analyzing Python code in {file_path}")
+        logging.debug(f"Analyzing Python code in {file_path}")
 
         # Heuristic: if shebang indicates Python 2, avoid AST parse noise
         head = content[:128]

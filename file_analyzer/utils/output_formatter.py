@@ -181,7 +181,7 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
         'code_complexity', 'security_smells', 'code_quality', 'commented_code', 'deprecated_api'
     }
     network_types = {
-        'ipv4', 'ipv6', 'domain_keywords', 'url', 'mac_address',
+        'ipv4', 'ipv6', 'domain_keywords', 'url', 'va_gov_domain', 'va_gov_url', 'mac_address',
         'network_protocols', 'network_security_issues', 'network_ports',
         'network_hosts', 'network_endpoints', 'firewall_rule'
     }

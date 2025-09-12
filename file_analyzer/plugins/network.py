@@ -33,7 +33,7 @@ class NetworkAnalyzer(AnalyzerPlugin):
         }
 
     def analyze(self, file_path: Path, file_type: str, content: str, results: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
-        logging.info(f"Analyzing network information in {file_path}")
+        logging.debug(f"Analyzing network information in {file_path}")
         self._analyze_network_protocols(content, results)
         self._analyze_network_security_issues(content, results)
         self._extract_network_configuration(content, results)

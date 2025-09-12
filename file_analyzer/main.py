@@ -62,6 +62,9 @@ def parse_arguments():
     file-analyzer dir ./project --plugins network,secret
     file-analyzer dir ./project --plugins all
 
+  {colors['cyan']('Available plugin groups:')}
+    code, api, network, json, xml, secret, all
+
   {colors['cyan']('Export to different formats:')}
     file-analyzer file ./example.js --json results.json --html report.html
     file-analyzer dir ./project --output-dir ./out --csv summary.csv
@@ -95,7 +98,7 @@ def parse_arguments():
     # file subcommand
     file_p = subparsers.add_parser('file', help='Analyze one or more files')
     file_p.add_argument('paths', nargs='+', help='Path(s) to file(s) to analyze')
-    file_p.add_argument('--plugins', help='Comma-separated plugins to enable (e.g., code,api,network,json,xml,all)')
+    file_p.add_argument('--plugins', help='Comma-separated plugin groups to enable: code, api, network, json, xml, secret, all')
     file_p.add_argument('--md', action='store_true', help='Output in markdown format (wrapped in triple backticks)')
     file_p.add_argument('--json', help='Export results to JSON file')
     file_p.add_argument('--html', help='Export results to HTML report')
@@ -108,7 +111,7 @@ def parse_arguments():
     dir_p = subparsers.add_parser('dir', help='Analyze files in a directory (use -r to recurse)')
     dir_p.add_argument('path', help='Directory to analyze')
     dir_p.add_argument('-r', '--recursive', action='store_true', help='Recurse into subdirectories')
-    dir_p.add_argument('--plugins', help='Comma-separated plugins to enable (e.g., code,api,network,json,xml,secret,all)')
+    dir_p.add_argument('--plugins', help='Comma-separated plugin groups to enable: code, api, network, json, xml, secret, all')
     dir_p.add_argument('--exclude', action='append', help='Exclude file pattern (glob syntax, can be used multiple times)')
     dir_p.add_argument('--include', action='append', help='Include only file pattern (glob syntax, can be used multiple times)')
     dir_p.add_argument('--max-size', type=int, default=100, help='Maximum file size to analyze in MB (default: 100)')
@@ -336,15 +339,19 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
             progress_bar.close()
             
     except ImportError:
-        # If tqdm is not available, fall back to simple output
+        # If tqdm is not available, fall back to a simple single-line progress bar
+        import sys as _sys
+        def _draw_bar(done: int, total: int, width: int = 40):
+            filled = int(width * done / max(1, total))
+            bar = '#' * filled + '-' * (width - filled)
+            _sys.stdout.write(f"\rAnalyzing files [{bar}] {done}/{total}")
+            _sys.stdout.flush()
+
         if not args.quiet:
-            print(f"Analyzing {total_files} files...")
-        
-        for i, file_path in enumerate(files):
+            _draw_bar(0, total_files)
+
+        for i, file_path in enumerate(files, start=1):
             try:
-                if not args.quiet:
-                    print(f"[{i+1}/{total_files}] Analyzing {file_path}...")
-                
                 # Fallback sequential path without subprocess/isolation
                 fa = FileAnalyzer(config)
                 fa.analyze_file(str(file_path))
@@ -352,6 +359,11 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
             except Exception as e:
                 logging.error(f"Error analyzing {file_path}: {str(e)}")
                 results[str(file_path)] = {"error": {f"Error: {str(e)}"}}
+            finally:
+                if not args.quiet:
+                    _draw_bar(i, total_files)
+        if not args.quiet:
+            print()
     
     return results
 
