@@ -444,7 +444,7 @@ class FileAnalyzer:
         Returns:
             Copy of the results dictionary
         """
-        snapshot: Dict[str, Any] = {}
+        snapshot = {}
         for key, value in self.results.items():
             if isinstance(value, set):
                 snapshot[key] = set(value)
