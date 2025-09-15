@@ -165,7 +165,7 @@ class FileAnalyzer:
         except Exception as e:
             logging.error(f"Error loading plugins: {str(e)}")
     
-    def analyze_file(self, file_path: str) -> Dict[str, Set[str]]:
+    def analyze_file(self, file_path: str) -> Dict[str, Any]:
         """
         Analyze a file and extract relevant information.
         
@@ -437,14 +437,26 @@ class FileAnalyzer:
     
     # Parallel chunk scanning removed; plugin-only processing used
     
-    def get_results(self) -> Dict[str, Set[str]]:
+    def get_results(self) -> Dict[str, Any]:
         """
         Get the analysis results.
         
         Returns:
             Copy of the results dictionary
         """
-        return {k: v.copy() for k, v in self.results.items()}
+        snapshot: Dict[str, Any] = {}
+        for key, value in self.results.items():
+            if isinstance(value, set):
+                snapshot[key] = set(value)
+            elif isinstance(value, dict):
+                snapshot[key] = value.copy()
+            elif isinstance(value, list):
+                snapshot[key] = list(value)
+            elif isinstance(value, tuple):
+                snapshot[key] = tuple(value)
+            else:
+                snapshot[key] = value
+        return snapshot
     
     def get_api_structure(self) -> Dict:
         """
