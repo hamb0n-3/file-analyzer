@@ -301,7 +301,8 @@ class FileAnalyzer:
                 mapping = {
                     'code_analyzer': {'code'},
                     'api_analyzer': {'api'},
-                    'network_analyzer': {'network'},
+                    'endpoints_analyzer': {'endpoints'},
+                    'network_analyzer': {'network'},  # legacy alias if any remain
                     'binary_analyzer': {'binary'},
                     'ml_analyzer': {'ml'},
                     'data_analyzer': set(),  # json/xml use explicit tags

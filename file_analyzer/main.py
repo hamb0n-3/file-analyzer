@@ -59,11 +59,11 @@ def parse_arguments():
 
   {colors['cyan']('Enable specific plugins:')}
     file-analyzer file ./example.js --plugins code,api
-    file-analyzer dir ./project --plugins network,secret
+    file-analyzer dir ./project --plugins endpoints,secret
     file-analyzer dir ./project --plugins all
 
   {colors['cyan']('Available plugin groups:')}
-    code, api, network, json, xml, secret, all
+    code, api, endpoints, json, xml, secret, all
 
   {colors['cyan']('Export to different formats:')}
     file-analyzer file ./example.js --json results.json --html report.html
@@ -98,7 +98,7 @@ def parse_arguments():
     # file subcommand
     file_p = subparsers.add_parser('file', help='Analyze one or more files')
     file_p.add_argument('paths', nargs='+', help='Path(s) to file(s) to analyze')
-    file_p.add_argument('--plugins', help='Comma-separated plugin groups to enable: code, api, network, json, xml, secret, all')
+    file_p.add_argument('--plugins', help='Comma-separated plugin groups to enable: code, api, endpoints, json, xml, secret, all')
     file_p.add_argument('--md', action='store_true', help='Output in markdown format (wrapped in triple backticks)')
     file_p.add_argument('--json', help='Export results to JSON file')
     file_p.add_argument('--html', help='Export results to HTML report')
@@ -111,7 +111,7 @@ def parse_arguments():
     dir_p = subparsers.add_parser('dir', help='Analyze files in a directory (use -r to recurse)')
     dir_p.add_argument('path', help='Directory to analyze')
     dir_p.add_argument('-r', '--recursive', action='store_true', help='Recurse into subdirectories')
-    dir_p.add_argument('--plugins', help='Comma-separated plugin groups to enable: code, api, network, json, xml, secret, all')
+    dir_p.add_argument('--plugins', help='Comma-separated plugin groups to enable: code, api, endpoints, json, xml, secret, all')
     dir_p.add_argument('--exclude', action='append', help='Exclude file pattern (glob syntax, can be used multiple times)')
     dir_p.add_argument('--include', action='append', help='Include only file pattern (glob syntax, can be used multiple times)')
     dir_p.add_argument('--max-size', type=int, default=100, help='Maximum file size to analyze in MB (default: 100)')
@@ -286,7 +286,8 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
         num_workers = max(1, multiprocessing.cpu_count() - 1)  # Leave one CPU free
     num_workers = min(num_workers, total_files)  # Don't use more workers than files
     
-    if not args.quiet:
+    # Suppress interactive progress when writing to output dir
+    if not args.quiet and not getattr(args, 'output_dir', None):
         print(f"\n{colors['bold']('Analyzing')} {total_files} files with {num_workers} workers...")
     
     if total_files == 0:
@@ -294,7 +295,7 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
     
     # Use progress bar if available and not in quiet mode
     try:
-        if not args.quiet:
+        if not args.quiet and not getattr(args, 'output_dir', None):
             from tqdm import tqdm
             progress_bar = tqdm(total=total_files, desc="Analyzing files", unit="file")
         else:
@@ -347,7 +348,7 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
             _sys.stdout.write(f"\rAnalyzing files [{bar}] {done}/{total}")
             _sys.stdout.flush()
 
-        if not args.quiet:
+        if not args.quiet and not getattr(args, 'output_dir', None):
             _draw_bar(0, total_files)
 
         for i, file_path in enumerate(files, start=1):
@@ -360,9 +361,9 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
                 logging.error(f"Error analyzing {file_path}: {str(e)}")
                 results[str(file_path)] = {"error": {f"Error: {str(e)}"}}
             finally:
-                if not args.quiet:
+                if not args.quiet and not getattr(args, 'output_dir', None):
                     _draw_bar(i, total_files)
-        if not args.quiet:
+        if not args.quiet and not getattr(args, 'output_dir', None):
             print()
     
     return results
@@ -411,6 +412,100 @@ def generate_output_path(args, file_path: Path, extension: str) -> str:
         return str(output_dir / f"{file_path.stem}_analysis{extension}")
     else:
         return f"{file_path.stem}_analysis{extension}"
+
+
+def _plugin_group_mapping() -> Dict[str, set]:
+    """Return mapping of plugin groups to data types for filtering/segregation."""
+    # Keep this in sync with utils.output_formatter.aggregate_results_by_plugin
+    code_types = {
+        'code_complexity', 'security_smells', 'code_quality', 'commented_code', 'deprecated_api'
+    }
+    endpoints_types = {
+        'ipv4', 'ipv6', 'domain_keywords', 'url', 'va_gov_domain', 'va_gov_url', 'mac_address',
+        'network_protocols', 'network_security_issues', 'network_ports',
+        'network_hosts', 'network_endpoints', 'firewall_rule'
+    }
+    api_types = {
+        'api_endpoint', 'api_method', 'content_type', 'api_version', 'api_parameter',
+        'authorization_header', 'rate_limit', 'api_key_param', 'curl_command', 'webhook_url',
+        'http_status_code', 'rest_resource', 'path_parameter', 'query_parameter', 'request_header',
+        'request_body_json', 'form_data', 'api_request_examples', 'successful_json_request',
+        'failed_json_request', 'api_framework', 'openapi_schema', 'graphql_query', 'graphql_schema',
+        'soap_wsdl', 'api_auth_scheme', 'oauth_flow', 'api_security_header', 'api_doc_comment',
+        'swagger_annotation', 'openapi_tag', 'webhook_event', 'pagination', 'rate_limit_header', 'caching_header',
+        # Common auth/key artifacts often found alongside API usage
+        'jwt', 'access_token', 'refresh_token', 'oauth_token', 'api_token', 'auth_token', 'api_key'
+    }
+    data_types = {
+        # Encoded/serialized and PII-esque items
+        'base64_encoded', 'hex_encoded', 'url_encoded', 'compressed_data', 'serialized_data',
+        'email', 'phone_number', 'personal_id', 'passport_number', 'xml_response'
+    }
+    crypto_types = {
+        'private_key', 'public_key', 'hash', 'encryption_key', 'certificate', 'signature'
+    }
+    ml_types = {
+        'ml_credential_findings', 'ml_api_findings', 'ml_security_findings'
+    }
+    # Secret-focused types (subset from API, crypto, auth, and sensitive data)
+    secret_types = {
+        'username', 'password', 'jwt', 'access_token', 'refresh_token', 'oauth_token', 'api_token', 'auth_token',
+        'api_key', 'aws_key', 'cloud_key', 'firebase_key', 'service_account', 'client_secret',
+        'private_key', 'encryption_key', 'certificate', 'signature',
+        'credit_card', 'social_security', 'session_id', 'cookie', 'database_connection'
+    }
+
+    return {
+        'code': code_types,
+        'api': api_types,
+        'endpoints': endpoints_types,
+        # legacy alias for backward compatibility
+        'network': endpoints_types,
+        'data': data_types,
+        'crypto': crypto_types,
+        'ml': ml_types,
+        'json': {
+            # JSON-centric artifacts
+            'request_body_json', 'form_data', 'email', 'phone_number', 'personal_id', 'passport_number',
+            'base64_encoded', 'hex_encoded', 'url_encoded', 'serialized_data', 'compressed_data'
+        },
+        'xml': {'xml_response', 'soap_wsdl'},
+        'secret': secret_types,
+    }
+
+
+def _filter_results_by_plugins(all_results: Dict[str, Dict[str, set]], plugins_value: Optional[str]) -> Dict[str, Dict[str, set]]:
+    """Filter results to only those belonging to the selected plugin groups.
+
+    Keeps 'file_metadata' and 'runtime_errors'. If plugins_value is None or contains 'all',
+    no filtering is applied.
+    """
+    if not plugins_value:
+        return all_results
+    try:
+        req = {p.strip().lower() for p in str(plugins_value).split(',') if p and p.strip()}
+    except Exception:
+        req = set()
+    if not req or 'all' in req:
+        return all_results
+
+    mapping = _plugin_group_mapping()
+    # Union of selected types
+    allowed_types: set = set()
+    for group in req:
+        allowed_types |= mapping.get(group, set())
+
+    filtered: Dict[str, Dict[str, set]] = {}
+    for fpath, res in all_results.items():
+        new_res: Dict[str, set] = {}
+        for k, v in res.items():
+            if k in ('file_metadata', 'runtime_errors'):
+                new_res[k] = v
+            elif k in allowed_types:
+                new_res[k] = v
+            # else drop category not in selected plugin groups
+        filtered[fpath] = new_res
+    return filtered
 
 
 def export_all_results(all_results: Dict[str, Dict[str, set]], args):
@@ -477,6 +572,21 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args):
                 else:
                     csv_path = args.csv
                 create_csv_report(results, csv_path)
+
+            # Always write a human-readable text or markdown report when output_dir is set
+            if args.output_dir:
+                text_ext = ".md" if args.md else ".txt"
+                text_path = generate_output_path(args, file_path, text_ext)
+                try:
+                    formatted = format_results(results, None, args.md, setup_colored_output())
+                    # Strip color codes for file output
+                    import re as _re
+                    ansi = _re.compile(r"\x1b\[[0-9;]*m")
+                    formatted_plain = ansi.sub("", formatted)
+                    Path(text_path).write_text(formatted_plain, encoding='utf-8')
+                    logging.info(f"Wrote report: {text_path}")
+                except Exception as e:
+                    logging.warning(f"Failed to write text report for {file_path}: {e}")
     
     # If we have multiple files, create a directory summary report
     if len(all_results) > 1 and getattr(args, 'command', None) == 'dir':
@@ -487,6 +597,18 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args):
             export_dir_summary_json(all_results, str(out_dir / 'summary.json'), root=Path(getattr(args, 'path', args.dir)))
             create_dir_summary_html(all_results, str(out_dir / 'summary.html'), root=Path(getattr(args, 'path', args.dir)))
             logging.info("Wrote directory summaries: summary.json, summary.html")
+            # Also write a plaintext/markdown summary if output_dir is set
+            if args.output_dir:
+                try:
+                    colors = setup_colored_output()
+                    summary_txt = format_dir_summary(all_results, root=Path(getattr(args, 'path', args.dir)), colors=colors)
+                    # Strip color codes
+                    import re as _re
+                    ansi = _re.compile(r"\x1b\[[0-9;]*m")
+                    summary_plain = ansi.sub("", summary_txt)
+                    (out_dir / ('summary.md' if args.md else 'summary.txt')).write_text(summary_plain, encoding='utf-8')
+                except Exception as e:
+                    logging.warning(f"Failed to write plaintext summary: {e}")
         except Exception as e:
             logging.warning(f"Failed to write directory summary: {e}")
 
@@ -561,6 +683,9 @@ def main():
     # Analyze all files
     all_results = analyze_files(files_to_analyze, config, args)
 
+    # If plugin groups are specified (and not 'all'), filter the results to segregate analyses
+    all_results = _filter_results_by_plugins(all_results, getattr(args, 'plugins', None))
+
     # Optional: run secret directory scan when requested via plugins on dir mode
     secret_scan_data = None
     if mode == 'dir' and getattr(args, 'plugins', None):
@@ -568,7 +693,8 @@ def main():
             plugin_set = {p.strip().lower() for p in args.plugins.split(',') if p.strip()}
         except Exception:
             plugin_set = set()
-        if not plugin_set or 'all' in plugin_set or 'secret' in plugin_set:
+        # Only run secret dir-scan when explicitly requested or when 'all' is selected
+        if 'all' in plugin_set or 'secret' in plugin_set:
             try:
                 from .dirscan.dirscan import scan_directory
                 root = Path(getattr(args, 'path', args.dir))
@@ -597,8 +723,8 @@ def main():
         except Exception as e:
             logging.warning(f"Failed to write secret scan report: {e}")
     
-    # Print results to console if not in quiet mode
-    if not args.quiet:
+    # Print results to console if not suppressed
+    if not args.quiet and not getattr(args, 'output_dir', None):
         # Calculate total findings
         total_findings = sum(
             sum(len(values) for key, values in results.items() 

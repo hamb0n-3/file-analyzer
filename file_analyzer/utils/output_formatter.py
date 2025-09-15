@@ -180,7 +180,7 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
     code_types = {
         'code_complexity', 'security_smells', 'code_quality', 'commented_code', 'deprecated_api'
     }
-    network_types = {
+    endpoints_types = {
         'ipv4', 'ipv6', 'domain_keywords', 'url', 'va_gov_domain', 'va_gov_url', 'mac_address',
         'network_protocols', 'network_security_issues', 'network_ports',
         'network_hosts', 'network_endpoints', 'firewall_rule'
@@ -209,7 +209,7 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
     }
 
     groups: Dict[str, Dict[str, Set[str]]] = {
-        'code': {}, 'api': {}, 'network': {}, 'data': {}, 'crypto': {}, 'ml': {}, 'other': {}
+        'code': {}, 'api': {}, 'endpoints': {}, 'data': {}, 'crypto': {}, 'ml': {}, 'other': {}
     }
 
     def bucket_for(dtype: str) -> str:
@@ -217,8 +217,8 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
             return 'code'
         if dtype in api_types:
             return 'api'
-        if dtype in network_types:
-            return 'network'
+        if dtype in endpoints_types:
+            return 'endpoints'
         if dtype in data_types:
             return 'data'
         if dtype in crypto_types:

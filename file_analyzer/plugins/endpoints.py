@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Network analyzer plugin (flattened)
+# Endpoints analyzer plugin (formerly Network analyzer)
 
 import re
 import logging
@@ -7,20 +7,22 @@ from pathlib import Path
 from typing import Dict, Set, Optional
 
 from .base_plugin import AnalyzerPlugin
-from ..core.patterns import get_network_patterns
+from ..core.patterns import get_network_patterns, get_endpoint_patterns
 
 
-class NetworkAnalyzer(AnalyzerPlugin):
-    """Analyze network-related information in files."""
+class EndpointsAnalyzer(AnalyzerPlugin):
+    """Analyze endpoints, hosts, IPs, URLs, and related network configs."""
 
     def __init__(self, config=None):
         super().__init__(config)
-        self.tags = {"network"}
+        # Support both new and legacy group names for selection
+        self.tags = {"endpoints", "network"}
         self.network_patterns = get_network_patterns()
+        self.endpoint_patterns = get_endpoint_patterns()
 
     @property
     def plugin_type(self) -> str:
-        return 'network_analyzer'
+        return 'endpoints_analyzer'
 
     @property
     def supported_file_types(self) -> Set[str]:
@@ -33,12 +35,47 @@ class NetworkAnalyzer(AnalyzerPlugin):
         }
 
     def analyze(self, file_path: Path, file_type: str, content: str, results: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
-        logging.debug(f"Analyzing network information in {file_path}")
+        logging.debug(f"Analyzing endpoints information in {file_path}")
+        self._extract_ips_domains_urls(content, results)
         self._analyze_network_protocols(content, results)
         self._analyze_network_security_issues(content, results)
         self._extract_network_configuration(content, results)
         self._correlate_network_endpoints(content, results)
         return results
+
+    def _extract_ips_domains_urls(self, content: str, results: Dict[str, Set[str]]) -> None:
+        # IPv4/IPv6
+        ipv4_re = self.endpoint_patterns.get('ipv4')
+        if ipv4_re:
+            for m in re.finditer(ipv4_re, content):
+                results.setdefault('ipv4', set()).add(m.group(0))
+        ipv6_re = self.endpoint_patterns.get('ipv6')
+        if ipv6_re:
+            for m in re.finditer(ipv6_re, content):
+                results.setdefault('ipv6', set()).add(m.group(0))
+        # Domain keywords
+        dom_re = self.endpoint_patterns.get('domain_keywords')
+        if dom_re:
+            for m in re.finditer(dom_re, content):
+                results.setdefault('domain_keywords', set()).add(m.group(0))
+        # URLs
+        url_re = self.endpoint_patterns.get('url')
+        if url_re:
+            for m in re.finditer(url_re, content):
+                results.setdefault('url', set()).add(m.group(0))
+        # VA.gov specifics
+        va_dom = self.endpoint_patterns.get('va_gov_domain')
+        if va_dom:
+            for m in re.finditer(va_dom, content):
+                results.setdefault('va_gov_domain', set()).add(m.group(0))
+        va_url = self.endpoint_patterns.get('va_gov_url')
+        if va_url:
+            for m in re.finditer(va_url, content):
+                results.setdefault('va_gov_url', set()).add(m.group(0))
+        # MAC addresses
+        mac_re = r'\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b'
+        for m in re.finditer(mac_re, content):
+            results.setdefault('mac_address', set()).add(m.group(0))
 
     def _analyze_network_protocols(self, content: str, results: Dict[str, Set[str]]) -> None:
         for protocol, pattern in self.network_patterns.get('protocols', {}).items():

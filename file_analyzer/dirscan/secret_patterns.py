@@ -220,7 +220,7 @@ def load_rules() -> List[Rule]:
 
         # === Contextual username/password patterns ===============================
         Rule("PASSWORD_ASSIGN", "Password Assignment",
-             _c(r"(?i)\b(pass|password|pwd|secret)\b\s*[:=]\s*([\S]{6,})"),
+             _c(r"(?i)\b(pass|password|pwd|secret)\b\s*[:=]\s*([\S]{4,})"),
              "Inline password/secret assignment.", "password", None, "high", ["password","assignment"]),
         Rule("USERNAME_PASSWORD_PAIR", "Username/Password Pair",
              _c(r"(?i)\b(user(name)?|login)\b\s*[:=]\s*\S+\s*[;,\n]+\s*\b(pass|password|pwd)\b\s*[:=]\s*\S+"),
