@@ -82,12 +82,14 @@ class FileAnalyzer:
         """Set up logging configuration."""
         log_level = self.config.get('log_level', logging.INFO)
         log_file = self.config.get('log_file', 'file_analyzer.log')
-        
-        # Ensure log directory exists
-        log_dir = os.path.dirname(log_file)
-        if log_dir and not os.path.exists(log_dir):
-            os.makedirs(log_dir, exist_ok=True)
-        
+
+        # Normalize and ensure the log directory exists (supports ~ expansion)
+        log_path = Path(str(log_file)).expanduser()
+        log_dir = log_path.parent
+        if log_dir and not log_dir.exists():
+            log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = str(log_path)
+
         # Configure logging with rotation
         try:
             from logging.handlers import RotatingFileHandler
