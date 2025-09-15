@@ -60,10 +60,14 @@ def parse_arguments():
   {colors['cyan']('Enable specific plugins:')}
     file-analyzer file ./example.js --plugins code,api
     file-analyzer dir ./project --plugins endpoints,secret
+    file-analyzer dir ./project --plugins crypto,json,xml
     file-analyzer dir ./project --plugins all
 
   {colors['cyan']('Available plugin groups:')}
-    code, api, endpoints, json, xml, secret, all
+    code, api (alias: web), endpoints (alias: network), json, xml, secret, crypto, ml, all
+
+  {colors['yellow']('Note:')} JSON and XML parsers run as core helpers regardless of --plugins.
+    They parse structure and expose minimal metadata to assist analysis.
 
   {colors['cyan']('Export to different formats:')}
     file-analyzer file ./example.js --json results.json --html report.html
@@ -98,7 +102,7 @@ def parse_arguments():
     # file subcommand
     file_p = subparsers.add_parser('file', help='Analyze one or more files')
     file_p.add_argument('paths', nargs='+', help='Path(s) to file(s) to analyze')
-    file_p.add_argument('--plugins', help='Comma-separated plugin groups to enable: code, api, endpoints, json, xml, secret, all')
+    file_p.add_argument('--plugins', help='Comma-separated plugin groups: code, api(web), endpoints(network), json, xml, secret, crypto, ml, all')
     file_p.add_argument('--md', action='store_true', help='Output in markdown format (wrapped in triple backticks)')
     file_p.add_argument('--json', help='Export results to JSON file')
     file_p.add_argument('--html', help='Export results to HTML report')
@@ -111,7 +115,7 @@ def parse_arguments():
     dir_p = subparsers.add_parser('dir', help='Analyze files in a directory (use -r to recurse)')
     dir_p.add_argument('path', help='Directory to analyze')
     dir_p.add_argument('-r', '--recursive', action='store_true', help='Recurse into subdirectories')
-    dir_p.add_argument('--plugins', help='Comma-separated plugin groups to enable: code, api, endpoints, json, xml, secret, all')
+    dir_p.add_argument('--plugins', help='Comma-separated plugin groups: code, api(web), endpoints(network), json, xml, secret, crypto, ml, all')
     dir_p.add_argument('--exclude', action='append', help='Exclude file pattern (glob syntax, can be used multiple times)')
     dir_p.add_argument('--include', action='append', help='Include only file pattern (glob syntax, can be used multiple times)')
     dir_p.add_argument('--max-size', type=int, default=100, help='Maximum file size to analyze in MB (default: 100)')

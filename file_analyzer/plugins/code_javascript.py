@@ -28,7 +28,8 @@ class JavaScriptCodeAnalyzer(AnalyzerPlugin):
             'HTTP Without TLS': r"http:\/\/(?!localhost|127\.0\.0\.1)",
             'Dangerous Function Creation': r"(?:new\s+Function|setTimeout\s*\(\s*['\"`][^'\"`]*['\"`]\s*\)|setInterval\s*\(\s*['\"`][^'\"`]*['\"`]\s*\))",
             'Prototype Pollution': r"(?:Object\.assign|Object\.prototype\.|__proto__|constructor\.prototype)",
-            'XSS Sinks': r"(?:\.outerHTML\s*=|\.insertAdjacentHTML|\.write\s*\(|\.writeln\s*\(|\.createContextualFragment\s*\())",
+            # Common DOM XSS sinks: property assignment and HTML injection APIs
+            'XSS Sinks': r"(?:\.innerHTML\s*=|\.outerHTML\s*=|\.insertAdjacentHTML\s*\(|\.write(?:ln)?\s*\(|\.createContextualFragment\s*\()",
             'Insecure Randomness': r"(?:Math\.random\s*\(\))",
             'JWT Verification Issues': r"(?:\.verify\s*\(\s*token\s*,\s*['\"`][^'\"]+['\"`]\s*[,\)]|{algorithms:\s*\[\s*['\"`]none['\"`]\s*\]})",
             'Client Storage of Sensitive Data': r"(?:localStorage\.setItem\s*\(\s*['\"`][^'\"]+['\"`]\s*,\s*(?:password|token|key|secret|credentials))",
@@ -53,7 +54,7 @@ class JavaScriptCodeAnalyzer(AnalyzerPlugin):
         self.additional_security_patterns = {
             'Dangerous Eval': r'(?:\beval\s*\(|\bnew\s+Function\s*\(|\bsetTimeout\s*\(\s*[\'"`][^\'"`]*[\'"`]\s*\)|\bsetInterval\s*\(\s*[\'"`][^\'"`]*[\'"`]\s*\))',
             'Prototype Pollution': r'(?:Object\.assign|Object\.prototype\.|__proto__|constructor\.prototype)',
-            'DOM XSS': r'(?:\.innerHTML\s*=|\.outerHTML\s*=|\.insertAdjacentHTML|\.write\s*\(|\.writeln\s*\()',
+            'DOM XSS': r'(?:\.innerHTML\s*=|\.outerHTML\s*=|\.insertAdjacentHTML\s*\(|\.write(?:ln)?\s*\()',
             'Insecure Randomness': r'(?:Math\.random\s*\(\))',
             'JWT Verification': r'(?:\.verify\s*\(\s*token\s*,\s*[\'"`][^\'"]+[\'"`]\s*[,\)])',
             'Sensitive Info Exposure': r'(?:localStorage\.setItem\s*\(\s*[\'"`][^\'"]+[\'"`]\s*,\s*(?:password|token|key|secret))',

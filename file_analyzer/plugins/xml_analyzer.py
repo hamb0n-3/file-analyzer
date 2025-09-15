@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-# XML data analyzer plugin
+# XML parser core plugin
 
 import logging
-import re
 from pathlib import Path
 from typing import Dict, Set, Optional
 
@@ -16,19 +15,19 @@ except Exception:  # pragma: no cover
 
 class XMLAnalyzer(AnalyzerPlugin):
     """
-    Analyze XML files to extract URLs/endpoints and detect sensitive values.
+    Core XML parser: parses XML structure and provides minimal metadata
+    to assist other plugins. No security heuristics here.
     """
+
+    requires_full_content = True
 
     def __init__(self, config=None):
         super().__init__(config)
-        self.tags = {"xml", "data"}
-        self._url_re = re.compile(r"https?://[^\s\"']+", re.IGNORECASE)
-        # This plugin relies on full content for structural parsing
-        self.requires_full_content = True
+        self.tags = {"xml", "core"}
 
     @property
     def plugin_type(self) -> str:
-        return "data_analyzer"
+        return "core_analyzer"
 
     @property
     def supported_file_types(self) -> Set[str]:
@@ -37,58 +36,25 @@ class XMLAnalyzer(AnalyzerPlugin):
     def can_analyze(self, file_path: Path, file_type: str, content: Optional[str] = None) -> bool:
         return file_path.suffix.lower() == ".xml"
 
-    def analyze(self, file_path: Path, file_type: str, content: str, results: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
-        logging.info(f"Analyzing XML content in {file_path}")
-
+    def analyze(self, file_path: Path, file_type: str, content: str, results: Dict[str, Set[str]]):
         if ET is None:
-            logging.warning("xml.etree.ElementTree not available; skipping XML analysis")
+            logging.info("xml.etree.ElementTree not available; skipping XML parser aid")
             return results
 
         try:
-            # Quick sanity check: trim BOM/whitespace and ensure it looks like XML
-            trimmed = content.lstrip("\ufeff\n\r\t ")
+            trimmed = (content or "").lstrip("\ufeff\n\r\t ")
             if not trimmed.startswith("<"):
-                logging.info("File does not appear to be XML after trimming; performing text scan fallback")
-                self._scan_text(trimmed, "xml_fallback", results)
+                results['_xml_valid'] = False
                 return results
-
             root = ET.fromstring(trimmed)
+            results['_xml_valid'] = True
+            results.setdefault('_xml_root_tag', set()).add(str(root.tag))
+            # Snapshot of top-level child tags (limited)
+            child_tags = set()
+            for i, child in enumerate(list(root)[:50]):
+                child_tags.add(str(child.tag))
+            if child_tags:
+                results.setdefault('_xml_top_children', set()).update(sorted(child_tags))
         except Exception as e:
-            # Reduce noise: log at INFO and still perform a lightweight text scan
-            logging.info(f"Failed to parse XML ({file_path}): {e}")
-            self._scan_text(content, "xml_parse_fallback", results)
-            return results
-
-        # Traverse nodes
-        for elem in root.iter():
-            tag_name = (elem.tag or "").lower()
-
-            # Text content
-            if elem.text:
-                self._scan_text(elem.text, tag_name, results)
-
-            # Attributes
-            for attr, val in (elem.attrib or {}).items():
-                self._scan_text(str(val), f"{tag_name}@{attr.lower()}", results)
-
+            logging.info(f"XML parse aid failed for {file_path}: {e}")
         return results
-
-    def _scan_text(self, text: str, context: str, results: Dict[str, Set[str]]):
-        # URLs and endpoints
-        for m in self._url_re.finditer(text):
-            url = m.group(0)
-            results.setdefault("url", set()).add(url)
-            if any(k in context for k in ("endpoint", "url", "webhook", "graphql", "api")):
-                results.setdefault("api_endpoint", set()).add(url)
-
-        # Heuristic secret detection
-        lower_ctx = context.lower()
-        if any(k in lower_ctx for k in ("password", "secret", "token", "apikey", "api_key", "private", "key")):
-            if isinstance(text, str) and len(text.strip()) >= 4:
-                results.setdefault("security_smells", set()).add(
-                    f"Suspicious XML field '{context}' with value length {len(text.strip())}"
-                )
-                if "token" in lower_ctx:
-                    results.setdefault("access_token", set()).add(text.strip())
-                elif "apikey" in lower_ctx or "api_key" in lower_ctx or ("key" in lower_ctx and len(text.strip()) > 16):
-                    results.setdefault("api_key", set()).add(text.strip())

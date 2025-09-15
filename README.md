@@ -65,14 +65,14 @@ file-analyzer file ./a.py ./b.js --plugins code,api --html results.html
 
 # Analyze a directory non-recursively and export aggregated per-plugin reports
 file-analyzer dir ./project --plugins all --html --json --csv --output-dir ./out
-# Produces: out/plugin-api.html, out/plugin-network.json, out/plugin-code.csv, ...
+# Produces: out/plugin-api.html, out/plugin-endpoints.json, out/plugin-code.csv, out/plugin-secret.json, ...
 # Also produces: out/summary.html and out/summary.json
 
 # Recursive directory scan with excludes and size limit (in MB)
 file-analyzer dir -r ./repo --exclude node_modules --exclude .git --max-size 50 --output-dir ./out
 
 # Only run specific plugin groups
-file-analyzer dir ./project --plugins code,network --html --output-dir ./out
+file-analyzer dir ./project --plugins code,endpoints --html --output-dir ./out
 
 # Enable Markdown terminal formatting for a single file
 file-analyzer file ./example.py --md
@@ -87,7 +87,7 @@ python -m file_analyzer --dir ./project
 
 ### Notable Options
 
-- `--plugins <list>`: Comma-separated plugin groups: `code, api, network, json, xml, ml, all`.
+- `--plugins <list>`: Comma-separated plugin groups: `code, api (web), endpoints (network), json, xml, secret, crypto, ml, all`.
 - `--parallel <N>`: Number of workers (0=auto).
 - `--timeout <sec>`: Per-file analysis timeout.
 - `--memory-limit <MB>`: Process memory safety cap.
@@ -96,6 +96,15 @@ python -m file_analyzer --dir ./project
 - `--output-dir <path>`: Where to write reports.
 - `--quiet`, `--summary-only`: Control console output.
 
+### Core Parsers (Always On)
+
+The JSON and XML parsers run regardless of `--plugins` selection. They do not perform security analysis; instead they aid other plugins by parsing structure and exposing minimal metadata:
+
+- JSON: `_json_valid`, `_json_top_keys`, and for JSONL `_jsonl_stats`.
+- XML: `_xml_valid`, `_xml_root_tag`, `_xml_top_children`.
+
+These underscore-prefixed fields may appear in JSON exports to help automation, but are not included in the human‑readable sections of HTML/text reports.
+
 ## Directory Reporting (Aggregated)
 
 When using `dir`, the analyzer aggregates findings across all files and writes one set of reports per plugin group, avoiding an explosion of per-file reports in large trees.
@@ -103,14 +112,14 @@ When using `dir`, the analyzer aggregates findings across all files and writes o
 Generated files (when requested via `--json/--html/--csv`):
 
 - `plugin-api.(json|html|csv)`
-- `plugin-network.(json|html|csv)`
+- `plugin-endpoints.(json|html|csv)`
 - `plugin-code.(json|html|csv)`
-- `plugin-data.(json|html|csv)`
 - `plugin-crypto.(json|html|csv)`
 - `plugin-ml.(json|html|csv)`
+- `plugin-secret.(json|html|csv)`
 - plus `summary.html` and `summary.json` (directory overview)
 
-Additionally, if `--plugins secret` (or `--plugins all`) is used in `dir` mode, a secret scan runs and writes `secret_scan.json` in the output directory.
+Secret findings are included in the aggregated per-plugin outputs when `--plugins secret` (or `all`) is selected.
 
 ## Binary Handling
 

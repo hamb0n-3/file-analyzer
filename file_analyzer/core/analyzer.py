@@ -297,7 +297,8 @@ class FileAnalyzer:
                     'network_analyzer': {'network'},  # legacy alias if any remain
                     'binary_analyzer': {'binary'},
                     'ml_analyzer': {'ml'},
-                    'data_analyzer': set(),  # json/xml use explicit tags
+                    'data_analyzer': set(),
+                    'core_analyzer': {'core'},
                 }
                 tags |= mapping.get(t, set())
                 # Derive a general tag from class name as a convenience
@@ -307,7 +308,10 @@ class FileAnalyzer:
                         tags.add(k)
                 return {x.lower() for x in tags}
 
-            applicable_plugins = [p for p in applicable_plugins if plugin_tags(p) & enabled]
+            # Always include core analyzers regardless of selection
+            core_plugins = [p for p in applicable_plugins if getattr(p, 'plugin_type', '') == 'core_analyzer' or 'core' in (getattr(p, 'tags', set()) or set())]
+            filtered = [p for p in applicable_plugins if p not in core_plugins and (plugin_tags(p) & enabled)]
+            applicable_plugins = core_plugins + filtered
         
         for plugin in applicable_plugins:
             try:
