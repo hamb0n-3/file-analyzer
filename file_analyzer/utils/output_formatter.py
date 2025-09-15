@@ -267,19 +267,28 @@ def format_dir_summary(all_results: Dict[str, Dict[str, Set[str]]], root: Option
     if colors is None:
         colors = {k: lambda x: x for k in ["red", "green", "yellow", "blue", "magenta", "cyan", "bold"]}
 
-    # Group files by parent directory
+    # Group files by parent directory, ignoring files with zero findings
     grouped: Dict[str, List[Tuple[str, int]]] = {}
     for file_path_str, res in all_results.items():
+        findings = _count_findings(res)
+        if findings == 0:
+            continue
         p = Path(file_path_str)
         parent = str(p.parent if root is None else p.parent.relative_to(root) if root in p.parents else p.parent)
-        grouped.setdefault(parent, []).append((file_path_str, _count_findings(res)))
+        grouped.setdefault(parent, []).append((file_path_str, findings))
 
     # Sort directories and files
     out_lines: List[str] = []
     out_lines.append(colors['bold']('Directory Summary'))
-    total_files = len(all_results)
+    total_files = sum(len(files) for files in grouped.values())
     total_findings = sum(cnt for files in grouped.values() for _, cnt in files)
-    out_lines.append(f"{colors['green']('Files:')} {total_files}  {colors['green']('Findings:')} {total_findings}\n")
+    out_lines.append(
+        f"{colors['green']('Files (with findings):')} {total_files}  {colors['green']('Findings:')} {total_findings}\n"
+    )
+
+    if not grouped:
+        out_lines.append(colors['yellow']('No files with findings detected.'))
+        return "\n".join(out_lines)
 
     for d in sorted(grouped.keys()):
         files = sorted(grouped[d], key=lambda t: t[0])
@@ -298,11 +307,14 @@ def create_dir_summary_html(all_results: Dict[str, Dict[str, Set[str]]], output_
     # Group
     grouped: Dict[str, List[Tuple[str, int]]] = {}
     for file_path_str, res in all_results.items():
+        findings = _count_findings(res)
+        if findings == 0:
+            continue
         p = Path(file_path_str)
         parent = str(p.parent if root is None else p.parent.relative_to(root) if root in p.parents else p.parent)
-        grouped.setdefault(parent, []).append((file_path_str, _count_findings(res)))
+        grouped.setdefault(parent, []).append((file_path_str, findings))
 
-    total_files = len(all_results)
+    total_files = sum(len(files) for files in grouped.values())
     total_findings = sum(cnt for files in grouped.values() for _, cnt in files)
 
     html = [
@@ -310,20 +322,23 @@ def create_dir_summary_html(all_results: Dict[str, Dict[str, Set[str]]], output_
         "<html><head><meta charset='utf-8'><title>Directory Summary</title>",
         "<style>body{font-family:Segoe UI,Arial,sans-serif;background:#f8f9fa;color:#333}.wrap{max-width:1100px;margin:0 auto;padding:20px}.card{background:#fff;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.1);padding:16px;margin-bottom:16px}.dir{font-weight:600;color:#007bff}.file{margin-left:12px}.meta{color:#555}</style>",
         "</head><body><div class='wrap'>",
-        f"<div class='card'><h2>Directory Summary</h2><div class='meta'>Files: {total_files} &nbsp; Findings: {total_findings}</div></div>"
+        f"<div class='card'><h2>Directory Summary</h2><div class='meta'>Files with findings: {total_files} &nbsp; Findings: {total_findings}</div></div>"
     ]
 
-    for d in sorted(grouped.keys()):
-        files = sorted(grouped[d], key=lambda t: t[0])
-        d_total = sum(cnt for _, cnt in files)
-        html.append("<div class='card'>")
-        html.append(f"<div class='dir'>{d} <span class='meta'>&mdash; total: {d_total}</span></div>")
-        html.append("<ul>")
-        for fp, cnt in files:
-            rel = str(Path(fp).relative_to(root)) if root and Path(fp).is_absolute() and root in Path(fp).parents else fp
-            html.append(f"<li class='file'>{rel} <span class='meta'>&mdash; findings: {cnt}</span></li>")
-        html.append("</ul>")
-        html.append("</div>")
+    if not grouped:
+        html.append("<div class='card'><div class='meta'>No files with findings detected.</div></div>")
+    else:
+        for d in sorted(grouped.keys()):
+            files = sorted(grouped[d], key=lambda t: t[0])
+            d_total = sum(cnt for _, cnt in files)
+            html.append("<div class='card'>")
+            html.append(f"<div class='dir'>{d} <span class='meta'>&mdash; total: {d_total}</span></div>")
+            html.append("<ul>")
+            for fp, cnt in files:
+                rel = str(Path(fp).relative_to(root)) if root and Path(fp).is_absolute() and root in Path(fp).parents else fp
+                html.append(f"<li class='file'>{rel} <span class='meta'>&mdash; findings: {cnt}</span></li>")
+            html.append("</ul>")
+            html.append("</div>")
 
     html.append("</div></body></html>")
 
@@ -338,18 +353,28 @@ def export_dir_summary_json(all_results: Dict[str, Dict[str, Set[str]]], output_
     """Export a JSON summary grouped by directory."""
     # Build structure
     grouped: Dict[str, List[Dict[str, Any]]] = {}
+    total_findings = 0
+    total_files = 0
     for file_path_str, res in all_results.items():
+        findings = _count_findings(res)
+        if findings == 0:
+            continue
         p = Path(file_path_str)
         parent = str(p.parent if root is None else p.parent.relative_to(root) if root in p.parents else p.parent)
         grouped.setdefault(parent, []).append({
             "file": str(Path(file_path_str).relative_to(root)) if root and Path(file_path_str).is_absolute() and root in Path(file_path_str).parents else file_path_str,
-            "total_findings": _count_findings(res)
+            "total_findings": findings
         })
+        total_findings += findings
+        total_files += 1
+
+    # Prune empty directory entries to keep payload compact
+    grouped = {directory: files for directory, files in grouped.items() if files}
 
     payload = {
         "summary": {
-            "total_files": len(all_results),
-            "total_findings": sum(item["total_findings"] for files in grouped.values() for item in files)
+            "total_files": total_files,
+            "total_findings": total_findings
         },
         "directories": grouped
     }

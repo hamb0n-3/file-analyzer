@@ -557,14 +557,20 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args):
             if not plugin_buckets:
                 logging.info("No plugin-group findings to export.")
             else:
+                def _suffix_path(base: Path, suffix: str) -> Path:
+                    """Attach suffix to base path even when base has none."""
+                    if not suffix.startswith('.'):
+                        raise ValueError(f"Suffix must start with a dot: {suffix}")
+                    return base.with_suffix(suffix) if base.suffix else base.parent / f"{base.name}{suffix}"
+
                 for plugin_name, agg_results in plugin_buckets.items():
                     base = out_dir / f"plugin-{plugin_name}"
                     if args.json:
-                        export_results_json(agg_results, str(base.with_suffix('.json')))
+                        export_results_json(agg_results, str(_suffix_path(base, '.json')))
                     if args.html:
-                        create_html_report(agg_results, None, str(base.with_suffix('.html')))
+                        create_html_report(agg_results, None, str(_suffix_path(base, '.html')))
                     if args.csv:
-                        create_csv_report(agg_results, str(base.with_suffix('.csv')))
+                        create_csv_report(agg_results, str(_suffix_path(base, '.csv')))
                 logging.info(
                     f"Wrote plugin-aggregated reports: {', '.join(sorted(plugin_buckets.keys()))}"
                 )
