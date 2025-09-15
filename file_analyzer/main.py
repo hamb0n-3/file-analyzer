@@ -325,10 +325,11 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
                     if progress_bar:
                         progress_bar.update(1)
         else:
-            # Process files sequentially
+            # Process files sequentially with a single analyzer instance
+            fa = FileAnalyzer(config)
             for file_path in files:
                 try:
-                    fa = FileAnalyzer(config)
+                    fa.reset_results()
                     fa.analyze_file(str(file_path))
                     results[str(file_path)] = fa.get_results()
                 except Exception as e:
@@ -373,6 +374,9 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
     return results
 
 
+_WORKER_ANALYZER = None  # Reused per worker process
+
+
 def _analyze_single_file(file_path, config):
     """
     Helper function for parallel file analysis.
@@ -385,9 +389,14 @@ def _analyze_single_file(file_path, config):
         Analysis results dictionary
     """
     try:
-        analyzer = FileAnalyzer(config)
-        analyzer.analyze_file(str(file_path))
-        return analyzer.get_results()
+        global _WORKER_ANALYZER
+        if _WORKER_ANALYZER is None:
+            _WORKER_ANALYZER = FileAnalyzer(config)
+        else:
+            # Ensure clean slate per file
+            _WORKER_ANALYZER.reset_results()
+        _WORKER_ANALYZER.analyze_file(str(file_path))
+        return _WORKER_ANALYZER.get_results()
     except Exception as e:
         logging.error(f"Error analyzing {file_path}: {str(e)}")
         # Include traceback for debugging
