@@ -3,10 +3,102 @@
 
 import re
 import logging
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Set, Optional
+from typing import Dict, Iterable, Iterator, Match, Optional, Pattern, Set
 
 from .base_plugin import AnalyzerPlugin
+
+
+@dataclass(frozen=True)
+class EndpointPattern:
+    """Compiled regex describing a network endpoint or URL."""
+
+    name: str
+    pattern: Pattern[str]
+    result_key: str
+    description: str = ""
+    value_group: int = 0
+
+
+def _compile_endpoint_patterns() -> list[EndpointPattern]:
+    """Return curated endpoint patterns used by the analyzer."""
+
+    return [
+        EndpointPattern(
+            "IPv4 Address",
+            re.compile(r"(?<!\d)(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?!\d)"),
+            "ipv4",
+            "Possible IPv4 address.",
+        ),
+        EndpointPattern(
+            "IPv6 Address",
+            re.compile(r"\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b"),
+            "ipv6",
+            "Possible IPv6 address.",
+        ),
+        EndpointPattern(
+            "Domain Name",
+            re.compile(r"\b(?:(?=[\w.-]*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}\b"),
+            "domain_keywords",
+            "Domain-like hostname.",
+        ),
+        EndpointPattern(
+            "HTTP URL",
+            re.compile(r"https?://[A-Za-z0-9\-._~%]+(?::\d{1,5})?(?:/[^\s\"\'<>]*)?"),
+            "url",
+            "HTTP(S) URL.",
+        ),
+        EndpointPattern(
+            "VA.gov Domain",
+            re.compile(r"(?i)\b(?:[A-Za-z0-9-]+\.)*va\.gov\b"),
+            "va_gov_domain",
+            "Veterans Affairs domain.",
+        ),
+        EndpointPattern(
+            "VA.gov URL",
+            re.compile(r"(?i)\bhttps?://(?:[A-Za-z0-9-]+\.)*va\.gov(?:/[^\s\"\'<>]*)?"),
+            "va_gov_url",
+            "Veterans Affairs URL.",
+        ),
+        EndpointPattern(
+            "Cloud Provider Endpoint",
+            re.compile(
+                r"(?i)\bhttps?://(?:[^/\s]+\.)?(?:amazonaws|azurewebsites|windows|cloudfront|googleapis|appspot|firebaseio|digitaloceanspaces|herokuapp|supabase|vercel|render)\.[^\s\"\'<>]+"
+            ),
+            "cloud_endpoint",
+            "Likely cloud-hosted endpoint.",
+        ),
+        EndpointPattern(
+            "Firebase Realtime Database URL",
+            re.compile(r"https://[A-Za-z0-9-]+\.firebaseio\.com/[^\s\"\'<>]+"),
+            "firebase_url",
+            "Firebase Realtime Database endpoint.",
+        ),
+        EndpointPattern(
+            "Supabase Project URL",
+            re.compile(r"https://[a-z]{15,}\.supabase\.co\b"),
+            "supabase_url",
+            "Supabase project endpoint.",
+        ),
+    ]
+
+
+DEFAULT_ENDPOINT_PATTERNS: list[EndpointPattern] = _compile_endpoint_patterns()
+
+
+def iter_endpoint_matches(
+    text: str, patterns: Iterable[EndpointPattern] | None = None
+) -> Iterator[tuple[EndpointPattern, Match[str]]]:
+    """Yield endpoint pattern matches for provided text."""
+
+    active_patterns = patterns or DEFAULT_ENDPOINT_PATTERNS
+    for endpoint_pattern in active_patterns:
+        try:
+            for match in endpoint_pattern.pattern.finditer(text):
+                yield endpoint_pattern, match
+        except re.error:
+            continue
 
 
 class EndpointsAnalyzer(AnalyzerPlugin):
@@ -67,15 +159,8 @@ class EndpointsAnalyzer(AnalyzerPlugin):
                 'host': r'(?:^|\s)(?:HOST|host|SERVER|server)\s*(?:=|:)\s*[\'\"]([\w\.\-]+)[\'\"]',
             }
         }
-        # Inline endpoint patterns
-        self.endpoint_patterns = {
-            'ipv4': r'(?<!\d)(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?!\d)',
-            'ipv6': r'\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b',
-            'domain_keywords': r'\b(?:(?=[\w.-]*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}\b',
-            'url': r'https?://[A-Za-z0-9\-._~%]+(?::\d{1,5})?(?:/[^\s\"\'<>]*)?',
-            'va_gov_domain': r'(?i)\b(?:[A-Za-z0-9-]+\.)*va\.gov\b',
-            'va_gov_url': r'(?i)\bhttps?://(?:[A-Za-z0-9-]+\.)*va\.gov(?:/[^\s\"\'<>]*)?',
-        }
+        # share endpoint regexes defined alongside Starlette endpoints
+        self.endpoint_patterns: list[EndpointPattern] = list(DEFAULT_ENDPOINT_PATTERNS)
 
     @property
     def plugin_type(self) -> str:
@@ -101,34 +186,12 @@ class EndpointsAnalyzer(AnalyzerPlugin):
         return results
 
     def _extract_ips_domains_urls(self, content: str, results: Dict[str, Set[str]]) -> None:
-        # IPv4/IPv6
-        ipv4_re = self.endpoint_patterns.get('ipv4')
-        if ipv4_re:
-            for m in re.finditer(ipv4_re, content):
-                results.setdefault('ipv4', set()).add(m.group(0))
-        ipv6_re = self.endpoint_patterns.get('ipv6')
-        if ipv6_re:
-            for m in re.finditer(ipv6_re, content):
-                results.setdefault('ipv6', set()).add(m.group(0))
-        # Domain keywords
-        dom_re = self.endpoint_patterns.get('domain_keywords')
-        if dom_re:
-            for m in re.finditer(dom_re, content):
-                results.setdefault('domain_keywords', set()).add(m.group(0))
-        # URLs
-        url_re = self.endpoint_patterns.get('url')
-        if url_re:
-            for m in re.finditer(url_re, content):
-                results.setdefault('url', set()).add(m.group(0))
-        # VA.gov specifics
-        va_dom = self.endpoint_patterns.get('va_gov_domain')
-        if va_dom:
-            for m in re.finditer(va_dom, content):
-                results.setdefault('va_gov_domain', set()).add(m.group(0))
-        va_url = self.endpoint_patterns.get('va_gov_url')
-        if va_url:
-            for m in re.finditer(va_url, content):
-                results.setdefault('va_gov_url', set()).add(m.group(0))
+        for pattern, match in iter_endpoint_matches(content, self.endpoint_patterns):
+            try:
+                value = match.group(pattern.value_group)
+            except IndexError:
+                value = match.group(0)
+            results.setdefault(pattern.result_key, set()).add(value)
         # MAC addresses
         mac_re = r'\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b'
         for m in re.finditer(mac_re, content):

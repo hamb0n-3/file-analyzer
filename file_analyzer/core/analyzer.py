@@ -128,7 +128,7 @@ class FileAnalyzer:
             'openapi_schema','graphql_query','graphql_schema','rest_resource','xml_response','error_pattern','http_error',
             'oauth_flow','api_auth_scheme','request_header','request_body_json','form_data','path_parameter','query_parameter',
             'api_doc_comment','webhook_event','pagination','rate_limit_header','successful_json_request','failed_json_request',
-            'ipv4','ipv6','domain_keywords','url','va_gov_domain','va_gov_url','mac_address'
+            'ipv4','ipv6','domain_keywords','url','va_gov_domain','va_gov_url','cloud_endpoint','firebase_url','supabase_url','mac_address'
         ]
         for key in base_keys:
             results[key] = set()

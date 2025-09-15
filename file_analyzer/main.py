@@ -444,7 +444,8 @@ def _plugin_group_mapping() -> Dict[str, set]:
         'code_complexity', 'security_smells', 'code_quality', 'commented_code', 'deprecated_api'
     }
     endpoints_types = {
-        'ipv4', 'ipv6', 'domain_keywords', 'url', 'va_gov_domain', 'va_gov_url', 'mac_address',
+        'ipv4', 'ipv6', 'domain_keywords', 'url', 'va_gov_domain', 'va_gov_url',
+        'cloud_endpoint', 'firebase_url', 'supabase_url', 'mac_address',
         'network_protocols', 'network_security_issues', 'network_ports',
         'network_hosts', 'network_endpoints', 'firewall_rule'
     }

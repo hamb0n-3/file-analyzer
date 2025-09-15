@@ -53,7 +53,7 @@ def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] =
     
     # Define categories for better organization
     categories = {
-        'Network Information': ['ipv4', 'ipv6', 'domain_keywords', 'url', 'va_gov_domain', 'va_gov_url', 'mac_address'],
+        'Network Information': ['ipv4', 'ipv6', 'domain_keywords', 'url', 'va_gov_domain', 'va_gov_url', 'cloud_endpoint', 'firebase_url', 'supabase_url', 'mac_address'],
         'Authentication': ['username', 'password', 'jwt', 'access_token', 'refresh_token', 'oauth_token', 'api_token', 'auth_token'],
         'API & Keys': ['api_key', 'aws_key', 'api_key_param', 'cloud_key', 'firebase_key', 'service_account', 'client_id', 'client_secret'],
         'Cryptography': ['private_key', 'public_key', 'hash', 'encryption_key', 'certificate', 'signature'],
