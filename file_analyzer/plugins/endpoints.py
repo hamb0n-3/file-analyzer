@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Dict, Set, Optional
 
 from .base_plugin import AnalyzerPlugin
-from ..core.patterns import get_network_patterns, get_endpoint_patterns
 
 
 class EndpointsAnalyzer(AnalyzerPlugin):
@@ -17,8 +16,66 @@ class EndpointsAnalyzer(AnalyzerPlugin):
         super().__init__(config)
         # Support both new and legacy group names for selection
         self.tags = {"endpoints", "network"}
-        self.network_patterns = get_network_patterns()
-        self.endpoint_patterns = get_endpoint_patterns()
+        # Inline network protocol/security patterns (migrated from core.patterns)
+        self.network_patterns = {
+            'protocols': {
+                'HTTP': r'(?i)(?:http\.(?:get|post|put|delete)|fetch\(|XMLHttpRequest|axios)',
+                'HTTPS': r'(?i)https:\/\/',
+                'FTP': r'(?i)(?:ftp:\/\/|ftps:\/\/|\bftp\s+(?:open|get|put))',
+                'SSH': r'(?i)(?:ssh\s+|ssh2_connect|new\s+SSH|JSch)',
+                'SMTP': r'(?i)(?:smtp\s+|mail\s+send|createTransport|sendmail|new\s+SmtpClient)',
+                'DNS': r'(?i)(?:dns\s+lookup|resolv|nslookup|dig\s+)',
+                'MQTT': r'(?i)(?:mqtt\s+|MQTTClient|mqtt\.connect)',
+                'WebSocket': r'(?i)(?:new\s+WebSocket|createWebSocketClient|websocket\.connect)',
+                'gRPC': r'(?i)(?:grpc\.(?:Server|Client)|new\s+ServerBuilder)',
+                'GraphQL': r'(?i)(?:graphql\s+|ApolloClient|gql`)',
+                'TCP/IP': r'(?i)(?:socket\.|Socket\(|createServer|listen\(\d+|bind\(\d+|connect\(\d+)',
+                'UDP': r'(?i)(?:dgram\.|DatagramSocket|UdpClient)',
+                'ICMP': r'(?i)(?:ping\s+|ICMP|IcmpClient)',
+                'SNMP': r'(?i)(?:snmp\s+|SnmpClient|createSnmpSession)',
+                'LDAP': r'(?i)(?:ldap\s+|LdapClient|createLdapConnection)',
+                # JavaScript-specific
+                'Fetch API': r'(?i)(?:fetch\s*\(|\.then\s*\(|\.json\s*\(\s*\)|\.blob\s*\(\s*\))',
+                'Axios': r'(?i)(?:axios\.(?:get|post|put|delete|patch)|axios\s*\(\s*\{)',
+                'jQuery AJAX': r'(?i)(?:\$\.(?:ajax|get|post|getJSON)|jQuery\.(?:ajax|get|post))',
+                'XMLHttpRequest': r'(?i)(?:new\s+XMLHttpRequest\(|\.open\s*\(|\.send\s*\(|\.onreadystatechange)',
+                'NodeJS HTTP': r'(?i)(?:require\s*\(\s*[\'\"]http[\'\"]|http\.createServer|http\.request|http\.get)',
+                'NodeJS HTTPS': r'(?i)(?:require\s*\(\s*[\'\"]https[\'\"]|https\.createServer|https\.request|https\.get)',
+                'WebRTC': r'(?i)(?:RTCPeerConnection|getUserMedia|createDataChannel|onicecandidate)',
+                'Server-Sent Events': r'(?i)(?:new\s+EventSource\s*\(|\.addEventListener\s*\(\s*[\'\"]message[\'\"])',
+                'Service Workers': r'(?i)(?:navigator\.serviceWorker|ServiceWorkerRegistration|new\s+Cache\()',
+                'Firebase': r'(?i)(?:firebase\.database\(\)|ref\(\)|child\(\)|set\(\)|push\(\)|update\(\)|remove\(\))',
+                'Socket.IO': r'(?i)(?:io\s*\(\s*|\.on\s*\(\s*[\'\"]connect[\'\"]\s*|socket\.emit\s*\()',
+                'Cross-Domain': r'(?i)(?:\.postMessage\s*\(|JSONP|document\.domain\s*=)',
+            },
+            'security_issues': {
+                'Clear Text Credentials': r'(?i)(?:auth=|user:pass@|username=\w+&password=)',
+                'Insecure Protocol': r'(?i)(?:ftp:\/\/|telnet:\/\/|http:\/\/(?!localhost|127\.0\.0\.1))',
+                'Hardcoded IP': r"\b(?:PUBLIC_IP|SERVER_ADDR|API_HOST)\s*=\s*['\"](?:\d{1,3}\.){3}\d{1,3}['\"]",
+                'Open Port': r'(?i)(?:listen\(\s*\d+|port\s*=\s*\d+|\.connect\(\s*(?:["\']\w+["\']\s*,\s*)?\d+\))',
+                'Weak TLS': r'(?i)(?:SSLv2|SSLv3|TLSv1\.0|TLSv1\.1|\bRC4\b|\bDES\b|MD5WithRSA|allowAllHostnames)',
+                'Certificate Validation Disabled': r'(?i)(?:verify=False|CERT_NONE|InsecureRequestWarning|rejectUnauthorized:\s*false|trustAllCerts)',
+                'Proxy Settings': r'(?i)(?:proxy\s*=|http_proxy|https_proxy|\.setProxy|\.proxy\()',
+                'CORS Misconfiguration': r'(?i)(?:Access-Control-Allow-Origin:\s*\*|cors\({.*?origin:\s*[\'\"]?\*[\'\"]?)',
+                'Unencrypted Socket': r'(?i)(?:new\s+Socket|socket\.|createServer)(?![^\n]*SSL|[^\n]*TLS)',
+                'Server-Side Request Forgery': r'(?i)(?:\.open\([\'\"]GET[\'\"],\s*(?:url|req|request))',
+                'DNS Rebinding': r'(?i)(?:allowLocal\s*:|allowAny\s*:|\*\.localhost)',
+                'WebSockets Insecure': r'(?i)(?:ws:\/\/|new\s+WebSocket\([\'\"]ws:\/\/)',
+            },
+            'configuration': {
+                'port': r'(?:^|\s)(?:PORT|port)\s*(?:=|:)\s*(\d+)',
+                'host': r'(?:^|\s)(?:HOST|host|SERVER|server)\s*(?:=|:)\s*[\'\"]([\w\.\-]+)[\'\"]',
+            }
+        }
+        # Inline endpoint patterns
+        self.endpoint_patterns = {
+            'ipv4': r'(?<!\d)(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)(?!\d)',
+            'ipv6': r'\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b',
+            'domain_keywords': r'\b(?:(?=[\w.-]*[A-Za-z])[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,24}\b',
+            'url': r'https?://[A-Za-z0-9\-._~%]+(?::\d{1,5})?(?:/[^\s\"\'<>]*)?',
+            'va_gov_domain': r'(?i)\b(?:[A-Za-z0-9-]+\.)*va\.gov\b',
+            'va_gov_url': r'(?i)\bhttps?://(?:[A-Za-z0-9-]+\.)*va\.gov(?:/[^\s\"\'<>]*)?',
+        }
 
     @property
     def plugin_type(self) -> str:

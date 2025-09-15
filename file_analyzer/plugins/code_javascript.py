@@ -7,7 +7,6 @@ import logging
 from pathlib import Path
 from typing import Dict, Set, Optional
 
-from ..core.patterns import get_language_security_patterns, get_network_patterns
 from .base_plugin import AnalyzerPlugin
 
 
@@ -17,7 +16,40 @@ class JavaScriptCodeAnalyzer(AnalyzerPlugin):
     def __init__(self, config=None):
         super().__init__(config)
         self.tags = {"code", "javascript"}
-        self.security_patterns = get_language_security_patterns().get('javascript', {})
+        # Inline JavaScript security patterns (migrated from core.patterns)
+        self.security_patterns = {
+            'Eval Usage': r"\beval\s*\(",
+            'Document Write': r"document\.write\s*\(",
+            'innerHtml Assignment': r"\.innerHTML\s*=",
+            'DOM-based XSS': r"(?:document\.(?:URL|documentURI|URLUnencoded|baseURI|cookie|referrer))",
+            'DOM Storage Usage': r"(?:localStorage|sessionStorage)\.",
+            'Hardcoded JWT': r"['\"]eyJ[A-Za-z0-9-_=]+\.[A-Za-z0-9-_=]+\.[A-Za-z0-9-_.+=]*['\"]",
+            'Protocol-relative URL': r"['\"]\/\/\w+",
+            'HTTP Without TLS': r"http:\/\/(?!localhost|127\.0\.0\.1)",
+            'Dangerous Function Creation': r"(?:new\s+Function|setTimeout\s*\(\s*['\"`][^'\"`]*['\"`]\s*\)|setInterval\s*\(\s*['\"`][^'\"`]*['\"`]\s*\))",
+            'Prototype Pollution': r"(?:Object\.assign|Object\.prototype\.|__proto__|constructor\.prototype)",
+            'XSS Sinks': r"(?:\.outerHTML\s*=|\.insertAdjacentHTML|\.write\s*\(|\.writeln\s*\(|\.createContextualFragment\s*\())",
+            'Insecure Randomness': r"(?:Math\.random\s*\(\))",
+            'JWT Verification Issues': r"(?:\.verify\s*\(\s*token\s*,\s*['\"`][^'\"]+['\"`]\s*[,\)]|{algorithms:\s*\[\s*['\"`]none['\"`]\s*\]})",
+            'Client Storage of Sensitive Data': r"(?:localStorage\.setItem\s*\(\s*['\"`][^'\"]+['\"`]\s*,\s*(?:password|token|key|secret|credentials))",
+            'Insecure Client-Side Validation': r"(?:\.validate\s*\(\s*\)|\.isValid\s*\(\s*\))",
+            'Weak Cryptography': r"(?:\bMD5\b|\bSHA1\b|\.createHash\s*\(\s*['\"`]md5['\"`]\s*\))",
+            'Postmessage Vulnerabilities': r"(?:window\.addEventListener\s*\(\s*['\"`]message['\"`]|\.postMessage\s*\(\s*[^,]+,\s*['\"]\*['\"])",
+            'CSRF Issues': r"(?:withCredentials\s*:\s*true|xhrFields\s*:\s*{\s*withCredentials\s*:\s*true\s*})",
+            'Content Security Issues': r"(?:unsafe-eval|unsafe-inline)",
+            'Hardcoded Credentials': r"(?:username\s*[:=]\s*['\"`][^'\"]+['\"`]|password\s*[:=]\s*['\"`][^'\"]+['\"`]|apiKey\s*[:=]\s*['\"`][^'\"]+['\"`]|token\s*[:=]\s*['\"`][^'\"]+['\"`])",
+            'Insecure Communication': r"(?:ws:\/\/(?!localhost|127\.0\.0\.1))",
+            'NoSQL Injection': r"(?:\.find\s*\(\s*{\s*\$where\s*:\s*|\.find\s*\(\s*{\s*['\"`][^'\"]+['\"`]\s*:\s*\$\w+)",
+            'Regular Expression DOS': r"(?:[^\\][.+*]\{\d+,\}|\(\.\*\)\+)",
+            'Insecure Cross-Origin Resource Sharing': r"(?:Access-Control-Allow-Origin\s*:\s*\*|cors\(\s*\{origin\s*:\s*['\"`]\*['\"`])",
+            'Insecure Third-Party Scripts': r"(?:<script\s+src\s*=\s*['\"`]http:\/\/|\.src\s*=\s*['\"`]http:\/\/)",
+            'Server-Side Request Forgery': r"(?:\.open\s*\(\s*['\"`]GET['\"`]\s*,\s*(?:url|req|request))",
+            'Insecure File Upload': r"(?:\.upload\s*\(\s*|\.uploadFile\s*\(\s*|createReadStream\s*\(\s*)",
+            'Insecure Iframe': r"(?:<iframe\s+src\s*=\s*['\"`]http:\/\/|\.src\s*=\s*['\"`]http:\/\/)",
+            'JSON Injection': r"(?:JSON\.parse\s*\(\s*.*(?:req|request|input|data)\s*)",
+            'Path Traversal': r"(?:fs\.readFileSync\s*\(\s*.*\.\.\/|fs\.readFile\s*\(\s*.*\.\.\/)",
+            'Command Injection': r"(?:(?:child_process|exec|spawn|execSync)\s*\(\s*.*(?:\+|\$\{))",
+        }
         self.additional_security_patterns = {
             'Dangerous Eval': r'(?:\beval\s*\(|\bnew\s+Function\s*\(|\bsetTimeout\s*\(\s*[\'"`][^\'"`]*[\'"`]\s*\)|\bsetInterval\s*\(\s*[\'"`][^\'"`]*[\'"`]\s*\))',
             'Prototype Pollution': r'(?:Object\.assign|Object\.prototype\.|__proto__|constructor\.prototype)',
@@ -59,7 +91,55 @@ class JavaScriptCodeAnalyzer(AnalyzerPlugin):
             'TypeScript': r'(?:implements\s+|interface\s+[\w_]+\s*\{|type\s+[\w_]+\s*=|as\s+[\w_]+)',
         }
 
-        self.network_patterns = get_network_patterns()
+        self.network_patterns = {
+            'protocols': {
+                'HTTP': r'(?i)(?:http\.(?:get|post|put|delete)|fetch\(|XMLHttpRequest|axios)',
+                'HTTPS': r'(?i)https:\/\/',
+                'FTP': r'(?i)(?:ftp:\/\/|ftps:\/\/|\bftp\s+(?:open|get|put))',
+                'SSH': r'(?i)(?:ssh\s+|ssh2_connect|new\s+SSH|JSch)',
+                'SMTP': r'(?i)(?:smtp\s+|mail\s+send|createTransport|sendmail|new\s+SmtpClient)',
+                'DNS': r'(?i)(?:dns\s+lookup|resolv|nslookup|dig\s+)',
+                'MQTT': r'(?i)(?:mqtt\s+|MQTTClient|mqtt\.connect)',
+                'WebSocket': r'(?i)(?:new\s+WebSocket|createWebSocketClient|websocket\.connect)',
+                'gRPC': r'(?i)(?:grpc\.(?:Server|Client)|new\s+ServerBuilder)',
+                'GraphQL': r'(?i)(?:graphql\s+|ApolloClient|gql`)',
+                'TCP/IP': r'(?i)(?:socket\.|Socket\(|createServer|listen\(\d+|bind\(\d+|connect\(\d+)',
+                'UDP': r'(?i)(?:dgram\.|DatagramSocket|UdpClient)',
+                'ICMP': r'(?i)(?:ping\s+|ICMP|IcmpClient)',
+                'SNMP': r'(?i)(?:snmp\s+|SnmpClient|createSnmpSession)',
+                'LDAP': r'(?i)(?:ldap\s+|LdapClient|createLdapConnection)',
+                'Fetch API': r'(?i)(?:fetch\s*\(|\.then\s*\(|\.json\s*\(\s*\)|\.blob\s*\(\s*\))',
+                'Axios': r'(?i)(?:axios\.(?:get|post|put|delete|patch)|axios\s*\(\s*\{)',
+                'jQuery AJAX': r'(?i)(?:\$\.(?:ajax|get|post|getJSON)|jQuery\.(?:ajax|get|post))',
+                'XMLHttpRequest': r'(?i)(?:new\s+XMLHttpRequest\(|\.open\s*\(|\.send\s*\(|\.onreadystatechange)',
+                'NodeJS HTTP': r'(?i)(?:require\s*\(\s*[\'\"]http[\'\"]|http\.createServer|http\.request|http\.get)',
+                'NodeJS HTTPS': r'(?i)(?:require\s*\(\s*[\'\"]https[\'\"]|https\.createServer|https\.request|https\.get)',
+                'WebRTC': r'(?i)(?:RTCPeerConnection|getUserMedia|createDataChannel|onicecandidate)',
+                'Server-Sent Events': r'(?i)(?:new\s+EventSource\s*\(|\.addEventListener\s*\(\s*[\'\"]message[\'\"])',
+                'Service Workers': r'(?i)(?:navigator\.serviceWorker|ServiceWorkerRegistration|new\s+Cache\()',
+                'Firebase': r'(?i)(?:firebase\.database\(\)|ref\(\)|child\(\)|set\(\)|push\(\)|update\(\)|remove\(\))',
+                'Socket.IO': r'(?i)(?:io\s*\(\s*|\.on\s*\(\s*[\'\"]connect[\'\"]\s*|socket\.emit\s*\()',
+                'Cross-Domain': r'(?i)(?:\.postMessage\s*\(|JSONP|document\.domain\s*=)',
+            },
+            'security_issues': {
+                'Clear Text Credentials': r'(?i)(?:auth=|user:pass@|username=\w+&password=)',
+                'Insecure Protocol': r'(?i)(?:ftp:\/\/|telnet:\/\/|http:\/\/(?!localhost|127\.0\.0\.1))',
+                'Hardcoded IP': r"\b(?:PUBLIC_IP|SERVER_ADDR|API_HOST)\s*=\s*['\"](?:\d{1,3}\.){3}\d{1,3}['\"]",
+                'Open Port': r'(?i)(?:listen\(\s*\d+|port\s*=\s*\d+|\.connect\(\s*(?:["\']\w+["\']\s*,\s*)?\d+\))',
+                'Weak TLS': r'(?i)(?:SSLv2|SSLv3|TLSv1\.0|TLSv1\.1|\bRC4\b|\bDES\b|MD5WithRSA|allowAllHostnames)',
+                'Certificate Validation Disabled': r'(?i)(?:verify=False|CERT_NONE|InsecureRequestWarning|rejectUnauthorized:\s*false|trustAllCerts)',
+                'Proxy Settings': r'(?i)(?:proxy\s*=|http_proxy|https_proxy|\.setProxy|\.proxy\()',
+                'CORS Misconfiguration': r'(?i)(?:Access-Control-Allow-Origin:\s*\*|cors\({.*?origin:\s*[\'\"]?\*[\'\"]?)',
+                'Unencrypted Socket': r'(?i)(?:new\s+Socket|socket\.|createServer)(?![^\n]*SSL|[^\n]*TLS)',
+                'Server-Side Request Forgery': r'(?i)(?:\.open\([\'\"]GET[\'\"],\s*(?:url|req|request))',
+                'DNS Rebinding': r'(?i)(?:allowLocal\s*:|allowAny\s*:|\*\.localhost)',
+                'WebSockets Insecure': r'(?i)(?:ws:\/\/|new\s+WebSocket\([\'\"]ws:\/\/)',
+            },
+            'configuration': {
+                'port': r'(?:^|\s)(?:PORT|port)\s*(?:=|:)\s*(\d+)',
+                'host': r"(?:^|\s)(?:HOST|host|SERVER|server)\s*(?:=|:)\s*['\"]([\w\.\-]+)['\"]",
+            }
+        }
 
         self.complexity_patterns = {
             'complex_function': r'function\s+[\w_]+\s*\([^)]*\)\s*\{(?:[^{}]|\{(?:[^{}]|\{[^{}]*\})*\})*\}',

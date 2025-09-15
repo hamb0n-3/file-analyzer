@@ -208,11 +208,22 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
         'ml_credential_findings', 'ml_api_findings', 'ml_security_findings'
     }
 
+    # Secret-focused types (subset across API/Crypto/Auth/Sensitive)
+    secret_types = {
+        'username', 'password', 'jwt', 'access_token', 'refresh_token', 'oauth_token', 'api_token', 'auth_token',
+        'api_key', 'aws_key', 'cloud_key', 'firebase_key', 'service_account', 'client_secret',
+        'private_key', 'encryption_key', 'certificate', 'signature',
+        'credit_card', 'social_security', 'session_id', 'cookie', 'database_connection'
+    }
+
     groups: Dict[str, Dict[str, Set[str]]] = {
-        'code': {}, 'api': {}, 'endpoints': {}, 'data': {}, 'crypto': {}, 'ml': {}, 'other': {}
+        'code': {}, 'api': {}, 'endpoints': {}, 'data': {}, 'crypto': {}, 'ml': {}, 'secret': {}, 'other': {}
     }
 
     def bucket_for(dtype: str) -> str:
+        # Give precedence to 'secret' so those items are not duplicated
+        if dtype in secret_types:
+            return 'secret'
         if dtype in code_types:
             return 'code'
         if dtype in api_types:

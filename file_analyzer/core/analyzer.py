@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 # Core analyzer class
 
-import re
 import logging
 import json
 import os
@@ -19,7 +18,7 @@ from functools import lru_cache
 
 from ..plugins.plugin_registry import PluginRegistry
 from ..utils.file_utils import read_file_content, detect_file_type, calculate_entropy, is_text_like_file
-from ..core.patterns import get_patterns, get_hash_patterns
+import re
 
 
 class MemoryLimitExceeded(Exception):
@@ -57,13 +56,6 @@ class FileAnalyzer:
         # Set up logging
         self._setup_logging()
         
-        # Get regex patterns for different types of data
-        self.patterns = get_patterns()
-        self.hash_patterns = get_hash_patterns()
-        
-        # Precompile regex patterns for performance
-        self._compile_patterns()
-        
         # Initialize results dictionary
         self.results = self._initialize_results()
         
@@ -85,17 +77,6 @@ class FileAnalyzer:
         
         # Load plugins
         self._load_plugins()
-    
-    def _compile_patterns(self) -> None:
-        """Precompile regex patterns for better performance."""
-        self.compiled_patterns = {}
-        for data_type, pattern in self.patterns.items():
-            try:
-                self.compiled_patterns[data_type] = re.compile(pattern, re.MULTILINE | re.DOTALL)
-            except re.error as e:
-                logging.error(f"Error compiling pattern for {data_type}: {str(e)}")
-                # Fallback to non-compiled pattern
-                self.compiled_patterns[data_type] = pattern
     
     def _setup_logging(self) -> None:
         """Set up logging configuration."""
@@ -136,8 +117,18 @@ class FileAnalyzer:
         """
         results = {}
         
-        # Initialize with all pattern keys
-        for key in self.patterns.keys():
+        # Initialize known categories used across plugins
+        base_keys = [
+            'email','hash','api_key','jwt','username','password','private_key','public_key','aws_key',
+            'base64_encoded','credit_card','social_security','database_connection','access_token','refresh_token',
+            'oauth_token','session_id','cookie','api_endpoint','api_method','content_type','api_version','api_parameter',
+            'authorization_header','rate_limit','api_key_param','curl_command','webhook_url','http_status_code',
+            'openapi_schema','graphql_query','graphql_schema','rest_resource','xml_response','error_pattern','http_error',
+            'oauth_flow','api_auth_scheme','request_header','request_body_json','form_data','path_parameter','query_parameter',
+            'api_doc_comment','webhook_event','pagination','rate_limit_header','successful_json_request','failed_json_request',
+            'ipv4','ipv6','domain_keywords','url','va_gov_domain','va_gov_url','mac_address'
+        ]
+        for key in base_keys:
             results[key] = set()
         
         # Add additional result categories
@@ -222,10 +213,11 @@ class FileAnalyzer:
                     )
                     self._chunked_analyze(file_path, file_type)
                 elif file_size > 10 * 1024 * 1024:  # 10MB
-                    self.analyze_file_parallel(file_path, file_type)
+                    # For larger files under memory limit, read and analyze once
+                    content, is_binary = read_file_content(file_path)
+                    self._process_with_plugins(file_path, file_type, content)
                 else:
                     content, is_binary = read_file_content(file_path)
-                    self._process_patterns(content)
                     self._process_with_plugins(file_path, file_type, content)
             
             # Clear timeout
@@ -342,11 +334,16 @@ class FileAnalyzer:
             while chunk:
                 logging.debug(f"Processing chunk {chunk_num} of file {file_path.name}")
                 
-                # Convert to string for processing
+                # Convert to string for processing and run lightweight plugins on-the-fly
                 content = chunk.decode('utf-8', errors='ignore')
-                
-                # Process patterns in this chunk
-                self._process_patterns(content)
+                for plugin in self.plugin_registry.get_plugins_for_file(file_path, file_type, content):
+                    if getattr(plugin, 'requires_full_content', False):
+                        continue
+                    try:
+                        plugin.analyze(file_path, file_type, content, self.results)
+                    except Exception as e:
+                        logging.error(f"Error in plugin {plugin.name}: {str(e)}")
+                        self.results['runtime_errors'].add(f"Plugin error ({plugin.name}): {str(e)}")
                 
                 # Read next chunk
                 chunk = f.read(chunk_size)
@@ -355,89 +352,17 @@ class FileAnalyzer:
                 # Force garbage collection between chunks
                 gc.collect()
         
-        # Process with lightweight plugins after chunked analysis
-        try:
-            # Use a temporary file for plugin processing if needed
-            with tempfile.NamedTemporaryFile(delete=False) as temp:
-                temp_path = Path(temp.name)
-                
-            # Process with plugins that don't require full content
-            basic_plugins = [p for p in self.plugin_registry.get_plugins_for_file(file_path, file_type) 
-                             if hasattr(p, 'requires_full_content') and not p.requires_full_content]
-                
-            for plugin in basic_plugins:
-                try:
-                    plugin.analyze(file_path, file_type, "", self.results)
-                except Exception as e:
-                    logging.error(f"Error in plugin {plugin.name}: {str(e)}")
-                    self.results['runtime_errors'].add(f"Plugin error ({plugin.name}): {str(e)}")
-        finally:
-            # Clean up
-            if 'temp_path' in locals() and temp_path.exists():
-                temp_path.unlink()
-    
-    def _process_patterns(self, content: str) -> None:
-        """
-        Process the content with built-in regex patterns.
-        
-        Args:
-            content: The file content to analyze
-        """
-        # Extract information using regex patterns
-        for data_type, compiled_pattern in self.compiled_patterns.items():
-            # Skip the JSON response patterns as they're handled by plugins
-            if data_type in ['successful_json_request', 'failed_json_request']:
-                continue
-            
+        # After chunked streaming, attempt basic plugins with empty content if they can operate without it
+        basic_plugins = [p for p in self.plugin_registry.get_plugins_for_file(file_path, file_type) 
+                         if getattr(p, 'requires_full_content', False) is False]
+        for plugin in basic_plugins:
             try:
-                # Check for excessive memory usage (use current RSS in bytes)
-                current_memory = self._get_current_rss_bytes()
-                if current_memory > self.memory_limit:
-                    raise MemoryLimitExceeded(
-                        f"{current_memory // (1024*1024)}MB > {self.memory_limit // (1024*1024)}MB"
-                    )
-                
-                # Pattern matching with timeout prevention
-                matches = self._safe_pattern_match(compiled_pattern, content)
-                
-                for match in matches:
-                    value = match.group(0)
-                    
-                    # Apply additional validation based on data type
-                    if data_type == 'ipv4':
-                        self._validate_ipv4(value, data_type)
-                    elif data_type == 'base64_encoded':
-                        self._validate_base64(value, data_type)
-                    elif data_type == 'hash':
-                        self._validate_hash(value, data_type)
-                    else:
-                        # Default case - just add the value
-                        self.results[data_type].add(value)
-            except TimeoutExceeded:
-                logging.warning(f"Pattern matching timed out for {data_type}")
-                self.results['runtime_errors'].add(f"Pattern matching timed out for {data_type}")
-            except MemoryLimitExceeded as e:
-                logging.warning(f"Memory limit exceeded during pattern matching: {str(e)}")
-                self.results['runtime_errors'].add(f"Memory limit exceeded during pattern matching")
-                # Force garbage collection
-                gc.collect()
+                plugin.analyze(file_path, file_type, "", self.results)
             except Exception as e:
-                logging.error(f"Error processing pattern {data_type}: {str(e)}")
-                self.results['runtime_errors'].add(f"Pattern error ({data_type}): {str(e)}")
+                logging.error(f"Error in plugin {plugin.name}: {str(e)}")
+                self.results['runtime_errors'].add(f"Plugin error ({plugin.name}): {str(e)}")
     
-    def _safe_pattern_match(self, pattern, content):
-        """Safely perform pattern matching without materializing all results at once."""
-        if isinstance(pattern, str):
-            try:
-                pattern = re.compile(pattern, re.MULTILINE | re.DOTALL)
-            except re.error:
-                return iter(())
-        
-        # Use finditer to stream matches and avoid large intermediate lists
-        try:
-            return pattern.finditer(content)
-        except re.error:
-            return iter(())
+    # Pattern scanning moved into plugins; helper removed
 
     def _get_total_memory_bytes(self) -> int:
         """Best-effort retrieval of total system memory in bytes."""
@@ -485,75 +410,7 @@ class FileAnalyzer:
         except AddressValueError:
             pass
     
-    def _validate_base64(self, value: str, data_type: str) -> None:
-        """
-        Validate and add a base64 encoded string.
-        
-        Args:
-            value: The value to validate
-            data_type: The data type category
-        """
-        from ..utils.file_utils import is_valid_base64
-        if is_valid_base64(value):
-            self.results[data_type].add(value)
-    
-    def _validate_hash(self, value: str, data_type: str) -> None:
-        """
-        Validate and add a hash.
-        
-        Args:
-            value: The value to validate
-            data_type: The data type category
-        """
-        hash_type = self._identify_hash(value)
-        confidence = calculate_entropy(value)
-        value = f"{value} (Type: {hash_type}, Entropy: {confidence:.2f})"
-        self.results[data_type].add(value)
-    
-    @lru_cache(maxsize=1024)
-    def _identify_hash(self, hash_value: str) -> str:
-        """
-        Advanced hash identification using pattern matching and entropy analysis.
-        
-        Args:
-            hash_value: The hash string to identify
-            
-        Returns:
-            Identified hash type(s) or 'Unknown'
-        """
-        # Clean the hash value
-        hash_value = hash_value.strip()
-        
-        # Calculate entropy
-        entropy = calculate_entropy(hash_value)
-        
-        # Store potential matches
-        potential_matches = []
-        
-        # Check against known patterns
-        for hash_type, (pattern, length) in self.hash_patterns.items():
-            if length and len(hash_value) != length:
-                continue
-                
-            if re.match(pattern, hash_value):
-                if hash_type == 'MD5':
-                    if entropy > 3.0:
-                        potential_matches.append(hash_type)
-                elif hash_type == 'BCrypt':
-                    potential_matches = ['BCrypt']
-                    break
-                else:
-                    potential_matches.append(hash_type)
-        
-        # Additional checks for specific hash types
-        if len(hash_value) == 32:
-            if all(c in '0123456789abcdef' for c in hash_value.lower()):
-                if hash_value.lower().startswith('aad3b435'):
-                    potential_matches = ['NTLM (Empty Password)']
-                elif entropy < 2.5:
-                    potential_matches.append('NTLM')
-        
-        return '/'.join(potential_matches) if potential_matches else 'Unknown'
+    # Hash and base64 validations are handled by respective plugins
     
     def analyze_file_parallel(self, file_path: Path, file_type: str) -> None:
         """
@@ -566,102 +423,15 @@ class FileAnalyzer:
             file_path: Path to the file to analyze
             file_type: Detected file type
         """
-        file_size = file_path.stat().st_size
-        
-        # Determine optimal chunk size and number of workers
-        cpu_count = max(1, multiprocessing.cpu_count() - 1)  # Leave one CPU free
-        chunk_size = max(1024 * 1024, file_size // cpu_count)  # At least 1MB
-        num_chunks = math.ceil(file_size / chunk_size)
-        
-        logging.debug(f"Processing large file ({file_size/1024/1024:.2f} MB) in {num_chunks} chunks using {cpu_count} workers")
-        
-        # Process chunks in parallel
-        with ProcessPoolExecutor(max_workers=cpu_count) as executor:
-            futures = []
-            
-            for i in range(num_chunks):
-                start_pos = i * chunk_size
-                end_pos = min(start_pos + chunk_size, file_size)
-                futures.append(executor.submit(self._process_file_chunk, file_path, start_pos, end_pos))
-                
-            # Collect results
-            completed = 0
-            for future in as_completed(futures):
-                try:
-                    chunk_results = future.result()
-                    self._merge_chunk_results(chunk_results)
-                    completed += 1
-                    logging.debug(f"Processed chunk {completed}/{num_chunks}")
-                except Exception as e:
-                    logging.error(f"Error processing chunk: {str(e)}")
-                    self.results['runtime_errors'].add(f"Chunk processing error: {str(e)}")
-        
-        # Process with plugins after parallel processing is complete
+        # Simplified: read content once and run plugins
         try:
-            # Only load content for plugins that really need it
             content, is_binary = read_file_content(file_path)
             self._process_with_plugins(file_path, file_type, content)
         except Exception as e:
-            logging.error(f"Error processing plugins after parallel analysis: {str(e)}")
-            self.results['runtime_errors'].add(f"Plugin processing error: {str(e)}")
+            logging.error(f"Error processing large file: {str(e)}")
+            self.results['runtime_errors'].add(f"Large file processing error: {str(e)}")
     
-    def _process_file_chunk(self, file_path: Path, start_pos: int, end_pos: int) -> Dict[str, Set[str]]:
-        """
-        Process a chunk of a file.
-        
-        Args:
-            file_path: Path to the file
-            start_pos: Starting position in file
-            end_pos: Ending position in file
-            
-        Returns:
-            Results for this chunk
-        """
-        chunk_results = {key: set() for key in self.results.keys()}
-        
-        try:
-            with open(file_path, 'rb') as f:
-                # Use memory mapping for efficient access
-                with mmap.mmap(f.fileno(), length=0, access=mmap.ACCESS_READ) as mm:
-                    # Extend chunk to include complete lines
-                    # Move start_pos to the beginning of a line
-                    if start_pos > 0:
-                        while start_pos > 0 and mm[start_pos-1:start_pos] != b'\n':
-                            start_pos -= 1
-                    
-                    # Move end_pos to the end of a line
-                    while end_pos < len(mm) and mm[end_pos-1:end_pos] != b'\n':
-                        end_pos += 1
-                    
-                    chunk_data = mm[start_pos:end_pos].decode('utf-8', errors='ignore')
-                    
-                    # Process the chunk with normal pattern detection
-                    for data_type, pattern in self.patterns.items():
-                        if data_type in ['successful_json_request', 'failed_json_request']:
-                            continue
-                            
-                        matches = re.finditer(pattern, chunk_data)
-                        for match in matches:
-                            value = match.group(0)
-                            # Apply simplified validation
-                            chunk_results[data_type].add(value)
-        except Exception as e:
-            logging.error(f"Error processing chunk {start_pos}-{end_pos}: {str(e)}")
-        
-        return chunk_results
-    
-    def _merge_chunk_results(self, chunk_results: Dict[str, Set[str]]) -> None:
-        """
-        Merge results from a chunk into the main results.
-        
-        Args:
-            chunk_results: Results from a chunk
-        """
-        for key, values in chunk_results.items():
-            if key in self.results:
-                self.results[key].update(values)
-            else:
-                self.results[key] = values
+    # Parallel chunk scanning removed; plugin-only processing used
     
     def get_results(self) -> Dict[str, Set[str]]:
         """

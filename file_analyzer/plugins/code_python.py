@@ -7,7 +7,6 @@ import ast
 from pathlib import Path
 from typing import Dict, Set, Optional
 
-from ..core.patterns import get_language_security_patterns
 from .base_plugin import AnalyzerPlugin
 
 
@@ -17,7 +16,16 @@ class PythonCodeAnalyzer(AnalyzerPlugin):
     def __init__(self, config=None):
         super().__init__(config)
         self.tags = {"code", "python"}
-        self.security_patterns = get_language_security_patterns().get('python', {})
+        # Inline Python security patterns (migrated from core.patterns)
+        self.security_patterns = {
+            'Hardcoded Secret': r"(?:password|secret|key|token)\s*=\s*['\"][^'\"]+['\"]",
+            'Shell Injection': r"(?:os\.system|subprocess\.call|subprocess\.Popen|eval|exec)\s*\(",
+            'SQL Injection': r"(?:execute|executemany)\s*\(\s*[f'\"]",
+            'Pickle Usage': r"pickle\.(?:load|loads)",
+            'Temp File': r"(?:tempfile\.mk(?:stemp|temp)|open\s*\(\s*['\"]\/tmp\/)",
+            'Assert Usage': r"\bassert\b",
+            'HTTP Without TLS': r"http:\/\/(?!localhost|127\.0\.0\.1)",
+        }
         # Needs full source for AST/metrics
         self.requires_full_content = True
 

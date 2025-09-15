@@ -7,23 +7,54 @@ from pathlib import Path
 from typing import Dict, Set, Optional, Any
 
 from .base_plugin import AnalyzerPlugin
-from ..core.patterns import get_patterns
 
 
-class APIAnalyzer(AnalyzerPlugin):
+class WebAnalyzer(AnalyzerPlugin):
     """
     Plugin for analyzing API endpoints, patterns, and related information.
     """
 
     def __init__(self, config=None):
         super().__init__(config)
-        self.tags = {"api"}
-        all_patterns = get_patterns()
-        self.api_patterns = {k: v for k, v in all_patterns.items() if any(
-            keyword in k for keyword in ['api', 'endpoint', 'webhook', 'graphql', 'rest']
-        )}
-        self.api_patterns['successful_json_request'] = all_patterns['successful_json_request']
-        self.api_patterns['failed_json_request'] = all_patterns['failed_json_request']
+        self.tags = {"api", "web"}
+        # Inline API-related regex patterns (migrated from core.patterns)
+        self.api_patterns = {
+            # Require an explicit scheme to avoid arbitrary path-like text
+            'api_endpoint': r"(?i)https?://[^\s\"']+/(?:api(?:/|$)|rest(?:/|$)|graphql(?:/|$)|v\d+/(?:[^\s\"']+))[^\s\"']*",
+            'api_method': r"(?i)(?:'|\"|\b)(?:GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)(?:'|\"|\b)",
+            'content_type': r"(?i)(?:Content-Type|content-type)[=:]\s*['\"]([^'\"]+)['\"]",
+            'api_version': r"(?i)(?:v\d+(?:\.\d+)*|\bversion[=:]\s*['\"]([^'\"]+)['\"])",
+            'api_parameter': r"(?i)(?:[?&][^=\s]+=[^&\s]+)",
+            'authorization_header': r"(?i)(?:Authorization|auth)[=:]\s*['\"]([^'\"]+)['\"]",
+            'rate_limit': r"(?i)(?:rate[_-]?limit|x-rate-limit)[=:]\s*['\"]?(\d+)['\"]?",
+            'api_key_param': r"(?i)(?:\?|&)(?:api_key|apikey|key)=([A-Za-z0-9._-]{16,})",
+            'curl_command': r"(?i)curl\s+(?:-X\s+(?:GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\s+)?['\"]?https?://[^\s\'\">]+",
+            'webhook_url': r"(?i)(?:webhook|callback)[=:]\s*['\"]?https?://[^\s'\"]+['\"]?",
+            'http_status_code': r"(?i)(?:status|code)[=:]\s*['\"]?(\d{3})['\"]?",
+            'openapi_schema': r"(?i)(?:\"openapi\"\s*:\s*\"\d+\.\d+\.\d+\"|\"swagger\"\s*:\s*\"\d+\.\d+\")",
+            'graphql_query': r"(?i)(?:query\s+\w+\s*\{[^}]*\}|mutation\s+\w+\s*\{[^}]*\})",
+            'graphql_schema': r"(?i)(?:type\s+\w+\s*\{[^}]*\}|input\s+\w+\s*\{[^}]*\}|interface\s+\w+\s*\{[^}]*\})",
+            'rest_resource': r"(?i)(?:\/[a-zA-Z0-9_-]+(?:\/\{[a-zA-Z0-9_-]+\})?(?:\/[a-zA-Z0-9_-]+)*)",
+            'xml_response': r"(?i)(?:<\?xml[^>]+>|<[a-zA-Z0-9_:]+\s+xmlns)",
+            'error_pattern': r"(?i)(?:\"error\"\s*:\s*\{|\"errors\"\s*:\s*\[|\<error>|\<errors>)",
+            'http_error': r"(?i)(?:[45]\d{2}\s+[A-Za-z\s]+)",
+            'oauth_flow': r"(?i)(?:oauth2|authorization_code|client_credentials|password|implicit)",
+            'api_auth_scheme': r"(?i)(?:bearer|basic|digest|apikey|oauth|jwt)\s+auth",
+            'request_header': r"(?i)(?:[A-Za-z0-9-]+:\s*[^\n]+)",
+            'request_body_json': r"(?i)(?:body\s*:\s*\{[^}]*\}|data\s*:\s*\{[^}]*\})",
+            'form_data': r"(?i)(?:FormData|multipart\/form-data|application\/x-www-form-urlencoded)",
+            'path_parameter': r"(?i)(?:\{[a-zA-Z0-9_-]+\})",
+            'query_parameter': r"(?i)(?:\?(?:[a-zA-Z0-9_-]+=[^&\s]+)(?:&[a-zA-Z0-9_-]+=[^&\s]+)*)",
+            'api_doc_comment': r"(?i)(?:\/\*\*[\s\S]*?\*\/|\/\/\/.*$|#\s+@api)",
+            'webhook_event': r"(?i)(?:\"event\"\s*:\s*\"[^\"]+\"|event=[^&\s]+)",
+            'pagination': r"(?i)(?:page=\d+|limit=\d+|offset=\d+|per_page=\d+)",
+            'rate_limit_header': r"(?i)(?:X-RateLimit-Limit|X-RateLimit-Remaining|X-RateLimit-Reset)",
+            'successful_json_request': r"(?i)(?:\{\s*\"(?:success|status|ok|result)\"\s*:\s*(?:true|\"success\"|\"ok\"|1)|\{\s*\"data\"\s*:|\{\s*\"[^\"]+\"\s*:\s*\{[^}]+\}\s*,\s*\"status\"\s*:\s*(?:200|201|\"success\"|\"ok\"))",
+            'failed_json_request': r"(?i)(?:\{\s*\"(?:error|errors|status)\"\s*:\s*(?:false|\"failed\"|\"error\"|0|\{)|\{\s*\"message\"\s*:\s*\"[^\"]*error[^\"]*\")",
+            'swagger_annotation': r"(?i)@(?:Api|ApiOperation|ApiResponse|ApiParam)\b",
+            'openapi_tag': r"(?i)\"tags\"\s*:\s*\[",
+            'caching_header': r"(?i)(?:Cache-Control|ETag|If-None-Match)\s*:",
+        }
         self.api_structure: Dict[str, Dict[str, Any]] = {}
 
     @property
@@ -46,6 +77,10 @@ class APIAnalyzer(AnalyzerPlugin):
         self.detect_api_frameworks(content, results)
         self.extract_api_responses(content, results)
         self.extract_complete_api_requests(content, results)
+        # Additional header/param detections
+        self._scan_simple_patterns(content, results)
+        # Session and cookie patterns (migrated from data_patterns)
+        self._scan_session_cookie(content, results)
         results['_api_structure'] = self.api_structure
         return results
 
@@ -198,3 +233,26 @@ class APIAnalyzer(AnalyzerPlugin):
                     results['api_request_examples'].add(example)
                 except Exception as e:
                     logging.warning(f"Error processing API request example: {str(e)}")
+
+    def _scan_simple_patterns(self, content: str, results: Dict[str, Set[str]]) -> None:
+        # Lightweight scans for headers, auth, params
+        for key in [
+            'authorization_header', 'request_header', 'api_key_param', 'content_type', 'api_parameter',
+            'path_parameter', 'query_parameter', 'webhook_url', 'http_status_code', 'rate_limit', 'rate_limit_header'
+        ]:
+            pat = self.api_patterns.get(key)
+            if not pat:
+                continue
+            for m in re.finditer(pat, content):
+                val = m.group(0)
+                results.setdefault(key, set()).add(val)
+
+    def _scan_session_cookie(self, content: str, results: Dict[str, Set[str]]) -> None:
+        patterns = {
+            'session_id': r"(?i)\b(?:session[_-]?id|sid)\b\s*[:=]\s*['\"]((?!example|sample|test|dummy|redacted)['\"A-Za-z0-9._-]{12,})['\"]",
+            'cookie': r"(?i)\bcookie\b\s*[:=]\s*['\"]((?!example|sample|test|dummy|redacted)['\"A-Za-z0-9._-]{12,})['\"]",
+        }
+        for key, pat in patterns.items():
+            for m in re.finditer(pat, content):
+                val = m.group(1) if m.lastindex else m.group(0)
+                results.setdefault(key, set()).add(val)

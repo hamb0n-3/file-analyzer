@@ -686,42 +686,8 @@ def main():
     # If plugin groups are specified (and not 'all'), filter the results to segregate analyses
     all_results = _filter_results_by_plugins(all_results, getattr(args, 'plugins', None))
 
-    # Optional: run secret directory scan when requested via plugins on dir mode
-    secret_scan_data = None
-    if mode == 'dir' and getattr(args, 'plugins', None):
-        try:
-            plugin_set = {p.strip().lower() for p in args.plugins.split(',') if p.strip()}
-        except Exception:
-            plugin_set = set()
-        # Only run secret dir-scan when explicitly requested or when 'all' is selected
-        if 'all' in plugin_set or 'secret' in plugin_set:
-            try:
-                from .dirscan.dirscan import scan_directory
-                root = Path(getattr(args, 'path', args.dir))
-                secret_scan_data = scan_directory(
-                    root=root,
-                    include_exts=None,
-                    excludes=args.exclude,
-                    threads=max(2, args.parallel or 2),
-                    redact=False
-                )
-            except Exception as e:
-                logging.warning(f"Secret scan failed: {e}")
-    
     # Export results if requested
     export_all_results(all_results, args)
-
-    # If secret scan ran and output dir specified, write a companion JSON
-    if secret_scan_data is not None:
-        try:
-            out_dir = Path(args.output_dir) if args.output_dir else Path.cwd()
-            out_dir.mkdir(parents=True, exist_ok=True)
-            out_path = out_dir / 'secret_scan.json'
-            import json as _json
-            out_path.write_text(_json.dumps(secret_scan_data, indent=2))
-            logging.info(f"Secret scan report written to {out_path}")
-        except Exception as e:
-            logging.warning(f"Failed to write secret scan report: {e}")
     
     # Print results to console if not suppressed
     if not args.quiet and not getattr(args, 'output_dir', None):
@@ -755,12 +721,6 @@ def main():
                 formatted_results = format_results(results, None, args.md, colors)
                 print(formatted_results)
 
-        # Print secret scan summary if available
-        if secret_scan_data is not None:
-            sev = secret_scan_data.get('summary_by_severity', {})
-            high = sev.get('high', 0) + sev.get('critical', 0)
-            print(f"\n{colors['bold']('Secret Scan Summary')} (dir)")
-            print(f"Findings: {secret_scan_data.get('totals',{}).get('findings',0)}  High/Critical: {high}")
     
     # Return success
     return 0
