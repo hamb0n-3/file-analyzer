@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Pattern, Set
 
 from .base_plugin import AnalyzerPlugin
+from ..utils.file_utils import calculate_entropy, is_valid_base64
 
 
 @dataclass(frozen=True)
@@ -39,7 +40,7 @@ def load_rules() -> List[Rule]:
     rules: List[Rule] = [
         # === Cloud / SCM tokens ===================================================
         Rule("AWS_ACCESS_KEY_ID", "AWS Access Key ID",
-             _c(r"(?<![A-Z0-9])[A-Z0-9]{4}?(AKIA|ASIA|AGPA|AIDA|AROA|AIPA)[A-Z0-9]{12}(?![A-Z0-9])"),
+             _c(r"(?<![A-Z0-9])((?:AKIA|ASIA|AGPA|AIDA|AROA|AIPA)[A-Z0-9]{16})(?![A-Z0-9])"),
              "Looks like an AWS Access Key ID.", "token", "AWS", "high", ["cloud","aws","credential"]),
         Rule("AWS_SECRET_ACCESS_KEY", "AWS Secret Access Key",
              _c(r"(?i)(?:aws)?[_-]?(?:secret)?[_-]?(?:access)?[_-]?key(?:id)?\s*[:=]\s*([A-Za-z0-9/+=]{40})"),
@@ -96,7 +97,7 @@ def load_rules() -> List[Rule]:
              _c(r"\bAC[a-f0-9]{32}\b", re.IGNORECASE),
              "Twilio Account SID.", "username", "Twilio", "medium", ["telephony","twilio"]),
         Rule("TWILIO_AUTH_TOKEN", "Twilio Auth Token (hex)",
-             _c(r"(?i)(?:(?:twilio_)?auth[_-]?token\s*[:=]\s*)?\b[a-f0-9]{32}\b"),
+             _c(r"(?i)twilio[_-]?auth[_-]?token\s*[:=]\s*['\"]?([a-f0-9]{32})['\"]?"),
              "Twilio Auth Token (32 hex).", "password", "Twilio", "high", ["telephony","twilio"]),
 
         Rule("NOTION_SECRET", "Notion Internal Integration Secret",
@@ -117,7 +118,7 @@ def load_rules() -> List[Rule]:
              "Google API key.", "token", "Google", "medium", ["google","api"]),
 
         Rule("OPENAI_API_KEY", "OpenAI API Key",
-             _c(r"sk-[A-Za-z0-9]{20,}|sk-proj-[A-Za-z0-9]{20,}"),
+             _c(r"\b(?:sk-[A-Za-z0-9]{32,}|sk-proj-[A-Za-z0-9]{32,})\b"),
              "OpenAI API key.", "token", "OpenAI", "high", ["ai","openai","credential"]),
 
         Rule("AZURE_SAS", "Azure SAS Token",
@@ -152,8 +153,8 @@ def load_rules() -> List[Rule]:
         # This intentionally casts a wide net but remains filtered by the scanner
         # using additional heuristics (e.g., surrounding keywords or length).
         Rule("HIGH_ENTROPY", "High-Entropy Candidate",
-             _c(r"(?<![A-Za-z0-9+/=])([A-Za-z0-9/_-]{24,})"),
-             "Generic high-entropy credential-like value.", "token", None, "medium", ["entropy","generic"]),
+             _c(r"(?<![A-Za-z0-9=+_-])([A-Za-z0-9=+_-]{24,})(?![A-Za-z0-9=+_-])"),
+            "Generic high-entropy credential-like value.", "token", None, "medium", ["entropy","generic"]),
 
         # === Contextual username/password patterns ===============================
         Rule("PASSWORD_ASSIGN", "Password Assignment",
@@ -225,11 +226,11 @@ class SensitiveAnalyzer(AnalyzerPlugin):
             if self._is_multiline_rule(rule):
                 continue
             try:
-                for i, line in enumerate(lines, start=1):
+                for line in lines:
                     for m in rule.pattern.finditer(line):
                         value = self._extract_value(rule, m)
                         key = self._map_rule_to_result_key(rule)
-                        if key and value:
+                        if key and value and self._should_keep(rule, value):
                             results.setdefault(key, set()).add(value)
             except re.error:
                 # Ignore malformed patterns in this context
@@ -243,18 +244,21 @@ class SensitiveAnalyzer(AnalyzerPlugin):
                 for m in rule.pattern.finditer(content):
                     value = self._extract_value(rule, m)
                     key = self._map_rule_to_result_key(rule)
-                    if key and value:
+                    if key and value and self._should_keep(rule, value):
                         results.setdefault(key, set()).add(value)
             except re.error:
                 continue
 
         # Additional direct regex scans for migrated patterns
-        from ..utils.file_utils import is_valid_base64
         for key, pat in self.migrated_patterns.items():
             try:
                 for m in re.finditer(pat, content):
                     val = m.group(1) if m.lastindex else m.group(0)
                     if key == 'base64_encoded' and not is_valid_base64(val):
+                        continue
+                    if key == 'credit_card' and not self._passes_luhn(val):
+                        continue
+                    if key == 'social_security' and not self._valid_social_security(val):
                         continue
                     results.setdefault(key, set()).add(val)
             except re.error:
@@ -343,3 +347,57 @@ class SensitiveAnalyzer(AnalyzerPlugin):
 
         # Last resort
         return "api_token"
+
+    def _should_keep(self, rule: Rule, value: str) -> bool:
+        """Apply rule-specific heuristics to limit false positives."""
+        if not value:
+            return False
+
+        # Normalize whitespace for comparisons without mutating stored value
+        candidate = value.strip()
+
+        if rule.rule_id == "HIGH_ENTROPY":
+            if len(candidate) < 24:
+                return False
+            classes = sum(bool(re.search(regex, candidate)) for regex in (r"[A-Z]", r"[a-z]", r"\d", r"[_=+\-]"))
+            if classes < 3:
+                return False
+            if calculate_entropy(candidate) < 3.5:
+                return False
+
+        if rule.rule_id == "PASSWORD_ASSIGN":
+            # Skip assignments pointing to lookups or placeholders (not real secrets)
+            lowered = candidate.lower()
+            if any(marker in lowered for marker in ("os.environ", "getenv", "input(", "changeme", "example", "sample", "todo")):
+                return False
+
+        return True
+
+    def _passes_luhn(self, value: str) -> bool:
+        """Validate credit-card like numbers using the Luhn checksum."""
+        digits = re.sub(r"\D", "", value)
+        if len(digits) < 13 or len(digits) > 19:
+            return False
+        total = 0
+        double = False
+        for ch in reversed(digits):
+            n = int(ch)
+            if double:
+                n *= 2
+                if n > 9:
+                    n -= 9
+            total += n
+            double = not double
+        return total % 10 == 0
+
+    def _valid_social_security(self, value: str) -> bool:
+        """Reject impossible SSNs (000/666 prefixes, invalid groups)."""
+        digits = re.sub(r"\D", "", value)
+        if len(digits) != 9:
+            return False
+        area, group, serial = digits[:3], digits[3:5], digits[5:]
+        if area in {"000", "666"} or area >= "900":
+            return False
+        if group == "00" or serial == "0000":
+            return False
+        return True
