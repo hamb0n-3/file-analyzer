@@ -345,32 +345,44 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
             progress_bar.close()
             
     except ImportError:
-        # If tqdm is not available, fall back to a simple single-line progress bar
+        # If tqdm is not available, fall back to a simple textual progress updater
         import sys as _sys
-        def _draw_bar(done: int, total: int, width: int = 40):
-            filled = int(width * done / max(1, total))
-            bar = '#' * filled + '-' * (width - filled)
-            _sys.stdout.write(f"\rAnalyzing files [{bar}] {done}/{total}")
-            _sys.stdout.flush()
 
-        if not args.quiet and not getattr(args, 'output_dir', None):
-            _draw_bar(0, total_files)
+        class _SimpleProgress:
+            def __init__(self, total: int, enabled: bool):
+                self.total = total
+                self.enabled = enabled
+                self.completed = 0
+                self.stream = _sys.stderr
+                if self.enabled:
+                    self.stream.write(f"Analyzing {total} files...\n")
+                    self.stream.flush()
 
-        for i, file_path in enumerate(files, start=1):
+            def advance(self, path: Path) -> None:
+                if not self.enabled:
+                    return
+                self.completed += 1
+                name = path.name if path else ""
+                suffix = f" {name}" if name else ""
+                self.stream.write(f"[{self.completed}/{self.total}]{suffix}\n")
+                self.stream.flush()
+
+        show_progress = not args.quiet and not getattr(args, 'output_dir', None)
+        progress = _SimpleProgress(total_files, show_progress)
+
+        fa = FileAnalyzer(config)
+        for file_path in files:
             try:
                 # Fallback sequential path without subprocess/isolation
-                fa = FileAnalyzer(config)
+                fa.reset_results()
                 fa.analyze_file(str(file_path))
                 results[str(file_path)] = fa.get_results()
             except Exception as e:
                 logging.error(f"Error analyzing {file_path}: {str(e)}")
                 results[str(file_path)] = {"error": {f"Error: {str(e)}"}}
             finally:
-                if not args.quiet and not getattr(args, 'output_dir', None):
-                    _draw_bar(i, total_files)
-        if not args.quiet and not getattr(args, 'output_dir', None):
-            print()
-    
+                progress.advance(file_path)
+
     return results
 
 

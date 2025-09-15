@@ -7,6 +7,8 @@ import ast
 from pathlib import Path
 from typing import Dict, Set, Optional, Tuple
 
+_PRINT_REFACTOR_TOOL = None
+
 from .base_plugin import AnalyzerPlugin
 
 
@@ -147,10 +149,12 @@ class PythonCodeAnalyzer(AnalyzerPlugin):
     def _convert_python2_prints(self, content: str) -> Optional[str]:
         """Best-effort conversion of Python 2 print statements using lib2to3."""
         try:
-            from lib2to3.refactor import RefactoringTool
-            fixer = RefactoringTool(['lib2to3.fixes.fix_print'])
-            fixer.log.setLevel(logging.ERROR)
-            return str(fixer.refactor_string(content, 'pycode'))
+            global _PRINT_REFACTOR_TOOL
+            if _PRINT_REFACTOR_TOOL is None:
+                from lib2to3.refactor import RefactoringTool
+                _PRINT_REFACTOR_TOOL = RefactoringTool(['lib2to3.fixes.fix_print'])
+                _PRINT_REFACTOR_TOOL.log.setLevel(logging.ERROR)
+            return str(_PRINT_REFACTOR_TOOL.refactor_string(content, 'pycode'))
         except Exception as exc:
             logging.debug(f"Failed to convert Python 2 print statements: {exc}")
             return None
