@@ -191,7 +191,17 @@ class SensitiveAnalyzer(AnalyzerPlugin):
         self.migrated_patterns = {
             'email': r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}\b",
             'username': r"(?i)\b(?:username|user|login)\b\s*[:=]\s*['\"]((?!example|sample|test|dummy|admin)['\"\w.@+-]{4,})['\"]",
-            'api_key': r"(?i)(?:\b(?:api[_-]?key|apikey|apiKey|client[_-]?secret|secret[_-]?key|access[_-]?key)\b)\s*[:=]\s*['\"]((?!changeme|example|sample|test|dummy|password|secret|redacted)[^'\"\s]{16,})['\"]",
+            'api_key': r"""(?ix)
+                (?:\b(?:api[_-]?key|apikey|apiKey|client[_-]?secret|secret[_-]?key|access[_-]?key)\b)
+                \s*[:=]\s*
+                ['\"]
+                (?!changeme|example|sample|test|dummy|password|secret|redacted|none|null|false|true)
+                (?=
+                    (?=.*?[A-Za-z])(?=.*?\d)
+                )
+                ([A-Za-z0-9_\-]{20,}|sk-[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{16,})
+                ['\"]
+            """,
             'base64_encoded': r"(?<![A-Za-z0-9+/=])(?:[A-Za-z0-9+/]{4}){10,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?(?![A-Za-z0-9+/=])",
             'credit_card': r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b",
             'social_security': r"\b\d{3}-\d{2}-\d{4}\b",
@@ -226,12 +236,13 @@ class SensitiveAnalyzer(AnalyzerPlugin):
             if self._is_multiline_rule(rule):
                 continue
             try:
-                for line in lines:
+                for line_no, line in enumerate(lines, start=1):
                     for m in rule.pattern.finditer(line):
                         value = self._extract_value(rule, m)
                         key = self._map_rule_to_result_key(rule)
                         if key and value and self._should_keep(rule, value):
-                            results.setdefault(key, set()).add(value)
+                            username = self._guess_context_username(lines, line_no, line, value)
+                            self._record_result(results, key, value, file_path, line_no, username)
             except re.error:
                 # Ignore malformed patterns in this context
                 continue
@@ -245,14 +256,17 @@ class SensitiveAnalyzer(AnalyzerPlugin):
                     value = self._extract_value(rule, m)
                     key = self._map_rule_to_result_key(rule)
                     if key and value and self._should_keep(rule, value):
-                        results.setdefault(key, set()).add(value)
+                        line_no = self._line_number_from_offset(content, m.start())
+                        username = self._guess_context_username(lines, line_no, None, value)
+                        self._record_result(results, key, value, file_path, line_no, username)
             except re.error:
                 continue
 
         # Additional direct regex scans for migrated patterns
         for key, pat in self.migrated_patterns.items():
             try:
-                for m in re.finditer(pat, content):
+                flags = re.VERBOSE if key == 'api_key' else 0
+                for m in re.finditer(pat, content, flags):
                     val = m.group(1) if m.lastindex else m.group(0)
                     if key == 'base64_encoded' and not is_valid_base64(val):
                         continue
@@ -260,7 +274,9 @@ class SensitiveAnalyzer(AnalyzerPlugin):
                         continue
                     if key == 'social_security' and not self._valid_social_security(val):
                         continue
-                    results.setdefault(key, set()).add(val)
+                    line_no = self._line_number_from_offset(content, m.start())
+                    username = self._guess_context_username(lines, line_no, None, val)
+                    self._record_result(results, key, val, file_path, line_no, username)
             except re.error:
                 continue
 
@@ -347,6 +363,65 @@ class SensitiveAnalyzer(AnalyzerPlugin):
 
         # Last resort
         return "api_token"
+
+    def _record_result(self, results: Dict[str, Set[str]], category: str,
+                       value: str, file_path: Path, line_no: Optional[int],
+                       username: Optional[str]) -> None:
+        bucket = results.setdefault(category, set())
+        bucket.add(value)
+
+        meta = results.setdefault('__meta__', {}).setdefault(category, [])
+        entry = {
+            'value': value,
+            'file': str(file_path),
+        }
+        if line_no is not None:
+            entry['line'] = int(line_no)
+        if username:
+            entry['username'] = username
+
+        for existing in meta:
+            if (
+                existing.get('value') == entry['value']
+                and existing.get('file') == entry['file']
+                and existing.get('line') == entry.get('line')
+            ):
+                if username and not existing.get('username'):
+                    existing['username'] = username
+                return
+        meta.append(entry)
+
+    def _line_number_from_offset(self, content: str, offset: int) -> Optional[int]:
+        if offset is None or offset < 0:
+            return None
+        return content.count('\n', 0, offset) + 1
+
+    def _guess_context_username(self, lines: List[str], line_no: Optional[int],
+                                line_text: Optional[str], value: str) -> Optional[str]:
+        if not lines:
+            return None
+
+        if line_no is not None and 1 <= line_no <= len(lines):
+            indices = range(max(1, line_no - 3), min(len(lines), line_no + 2) + 1)
+        else:
+            indices = range(1, min(len(lines), 5) + 1)
+
+        patterns = [
+            r"(?i)(?:user(?:name)?|account|owner|client|service)\s*[:=]\s*['\"]([\w.@+-]{3,})",
+            r"(?i)(?:user(?:name)?|account|owner|client|service)\s*['\"]([\w.@+-]{3,})['\"]",
+            r"(?i)(?:user|account|owner|client|service)[\w\s]*is\s*['\"]([\w.@+-]{3,})['\"]",
+        ]
+
+        for idx in indices:
+            candidate = line_text if (line_text is not None and idx == line_no) else lines[idx - 1]
+            for pat in patterns:
+                match = re.search(pat, candidate)
+                if match:
+                    extracted = match.group(1).strip()
+                    if extracted and extracted.lower() not in {value.lower(), 'user', 'username'}:
+                        return extracted
+
+        return None
 
     def _should_keep(self, rule: Rule, value: str) -> bool:
         """Apply rule-specific heuristics to limit false positives."""

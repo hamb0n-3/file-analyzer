@@ -7,6 +7,8 @@ import os
 import time
 import datetime
 from pathlib import Path
+import re
+from collections import defaultdict
 
 def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] = None, 
                    markdown_format: bool = False, colors: Optional[Dict] = None) -> str:
@@ -31,7 +33,7 @@ def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] =
     # Start markdown output if requested
     if markdown_format:
         output.append("```")
-    
+
     # Add timestamp and header
     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     output.append(f"{colors['bold']('=== File Analysis Results ===')}")
@@ -108,24 +110,47 @@ def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] =
             
         category_output.append(f"\n{colors['cyan'](category)} ({category_findings} findings):")
         
+    metadata_lookup: Dict[str, List[Dict[str, Any]]] = {}
+    if '__meta__' in results and isinstance(results['__meta__'], dict):
+        metadata_lookup = {k: list(v) for k, v in results['__meta__'].items() if isinstance(v, list)}
+
+    def _consume_metadata(dtype: str, value: str) -> Optional[Dict[str, Any]]:
+        entries = metadata_lookup.get(dtype)
+        if not entries:
+            return None
+        for idx, entry in enumerate(entries):
+            if entry.get('value') == value:
+                return entries.pop(idx)
+        return None
+
         for data_type in data_types:
             if data_type in results and results[data_type]:
                 values = results[data_type]
                 category_output.append(f"  {colors['green'](data_type.replace('_', ' ').title())} ({len(values)} found):")
-                
+
                 # Sort values but prioritize shorter ones first (often more relevant)
                 sorted_values = sorted(values, key=lambda x: (len(x), x))
-                
+
                 for value in sorted_values:
+                    display = value
+                    meta_entry = _consume_metadata(data_type, value)
+                    meta_parts: List[str] = []
+                    if meta_entry:
+                        if 'line' in meta_entry:
+                            meta_parts.append(f"line {meta_entry['line']}")
+                        if 'username' in meta_entry:
+                            meta_parts.append(f"user {meta_entry['username']}")
+                    if meta_parts:
+                        display = f"{value} ({', '.join(meta_parts)})"
                     # Apply special formatting to different types of findings
                     if data_type in ['security_smells', 'network_security_issues', 'high_entropy_strings']:
-                        category_output.append(f"    - {colors['yellow'](value)}")
+                        category_output.append(f"    - {colors['yellow'](display)}")
                     elif data_type in ['api_key', 'password', 'private_key', 'credit_card', 'access_token']:
-                        category_output.append(f"    - {colors['red'](value)}")
+                        category_output.append(f"    - {colors['red'](display)}")
                     elif data_type in ['api_endpoint', 'url', 'api_method']:
-                        category_output.append(f"    - {colors['blue'](value)}")
+                        category_output.append(f"    - {colors['blue'](display)}")
                     else:
-                        category_output.append(f"    - {value}")
+                        category_output.append(f"    - {display}")
         
         # Only add the category if it has content
         if len(category_output) > 1:
@@ -170,12 +195,8 @@ def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] =
 def _count_findings(results: Dict[str, Set[str]]) -> int:
     return sum(len(values) for key, values in results.items() if isinstance(values, set) and key not in ('file_metadata',))
 
-def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> Dict[str, Dict[str, Set[str]]]:
-    """Aggregate multi-file results into plugin-group buckets.
-
-    Returns a dict: plugin_group -> aggregated results dict (sets merged across files).
-    Plugin groups roughly correspond to the plugin types/tags in the system.
-    """
+def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> Dict[str, Dict[str, Any]]:
+    """Aggregate multi-file results into plugin-group buckets with metadata."""
     # Define mapping of data types to plugin groups
     code_types = {
         'code_complexity', 'security_smells', 'code_quality', 'commented_code', 'deprecated_api'
@@ -216,8 +237,15 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
         'credit_card', 'social_security', 'session_id', 'cookie', 'database_connection'
     }
 
-    groups: Dict[str, Dict[str, Set[str]]] = {
-        'code': {}, 'api': {}, 'endpoints': {}, 'data': {}, 'crypto': {}, 'ml': {}, 'secret': {}, 'other': {}
+    groups: Dict[str, Dict[str, Any]] = {
+        'code': {'categories': {}, 'entries': {}},
+        'api': {'categories': {}, 'entries': {}},
+        'endpoints': {'categories': {}, 'entries': {}},
+        'data': {'categories': {}, 'entries': {}},
+        'crypto': {'categories': {}, 'entries': {}},
+        'ml': {'categories': {}, 'entries': {}},
+        'secret': {'categories': {}, 'entries': {}},
+        'other': {'categories': {}, 'entries': {}}
     }
 
     def bucket_for(dtype: str) -> str:
@@ -241,18 +269,138 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
             return ''
         return 'other'
 
-    for file_res in all_results.values():
+    file_cache: Dict[str, Tuple[str, List[str]]] = {}
+
+    def _load_file(path: str) -> Tuple[str, List[str]]:
+        if path not in file_cache:
+            try:
+                text = Path(path).read_text(encoding='utf-8', errors='ignore')
+            except Exception:
+                text = ''
+            file_cache[path] = (text, text.splitlines())
+        return file_cache[path]
+
+    def _line_from_value(path: str, value: str, hinted: Optional[int]) -> Optional[int]:
+        if hinted is not None:
+            return hinted
+        if not value:
+            return None
+        text, lines = _load_file(path)
+        hint = re.search(r'line\s*(\d+)', value, re.IGNORECASE)
+        if hint:
+            try:
+                return int(hint.group(1))
+            except ValueError:
+                pass
+        snippet = value.strip().splitlines()[0] if value.strip() else ''
+        snippet = snippet[:120]
+        if not snippet:
+            return None
+        # Direct line containment
+        for idx, line in enumerate(lines):
+            if snippet in line:
+                return idx + 1
+        # Fallback to substring search in full text
+        pos = text.find(snippet)
+        if pos >= 0:
+            return text.count('\n', 0, pos) + 1
+        return None
+
+    stop_names = {"src", "app", "lib", "config", "build", "dist", "tmp", "tests", "test"}
+
+    def _guess_username(path: str, line_no: Optional[int], value: str) -> Optional[str]:
+        if line_no is None:
+            return None
+        text, lines = _load_file(path)
+        if not lines:
+            return None
+        idx = min(len(lines) - 1, max(0, line_no - 1))
+        window = range(max(0, idx - 3), min(len(lines), idx + 3))
+        patterns = [
+            r"(?i)(?:user(?:name)?|account|owner|client|service)\s*[:=]\s*['\"]([\w.@+-]{3,})",
+            r"(?i)(?:user(?:name)?|account|owner|client|service)\s*['\"]([\w.@+-]{3,})['\"]",
+            r"(?i)(?:user|account|owner|client|service)[\w\s]*is\s*['\"]([\w.@+-]{3,})['\"]",
+            r"(?i)@([\w.@+-]{3,})",
+        ]
+        for i in window:
+            line_text = lines[i]
+            for pat in patterns:
+                found = re.search(pat, line_text)
+                if found:
+                    candidate = found.group(1).strip()
+                    lower = candidate.lower()
+                    if lower and lower not in {value.lower(), 'user', 'username', 'owner'}:
+                        return candidate
+        # Comments heuristics
+        comment_pat = re.search(r'(?://|#)\s*(?:user|account|owner|service)\s*[:=]?\s*([\w.@+-]{3,})', lines[idx])
+        if comment_pat:
+            return comment_pat.group(1)
+        parts = [seg for seg in Path(path).parts if seg.lower() not in stop_names]
+        for seg in reversed(parts):
+            if re.fullmatch(r'[A-Za-z0-9_.@-]{4,}', seg) and not seg.isdigit():
+                return seg
+        return None
+
+    for file_path, file_res in all_results.items():
+        meta_lookup = defaultdict(list)
+        for dtype, entries in file_res.get('__meta__', {}).items():
+            for entry in entries:
+                meta_lookup[(dtype, entry.get('value'))].append(entry)
+
         for dtype, values in file_res.items():
+            if dtype in {'file_metadata', 'runtime_errors', '__meta__'}:
+                continue
             if not isinstance(values, set) or not values:
                 continue
             grp = bucket_for(dtype)
             if not grp:
                 continue
-            bucket = groups.setdefault(grp, {})
-            bucket.setdefault(dtype, set()).update(values)
+            bucket = groups[grp]
+            cat_values = bucket.setdefault('categories', {}).setdefault(dtype, set())
+            cat_entries = bucket.setdefault('entries', {}).setdefault(dtype, [])
+
+            for raw_value in values:
+                value = raw_value if isinstance(raw_value, str) else str(raw_value)
+                cat_values.add(value)
+                meta_entry = None
+                if (dtype, raw_value) in meta_lookup and meta_lookup[(dtype, raw_value)]:
+                    meta_entry = meta_lookup[(dtype, raw_value)].pop(0)
+                elif (dtype, value) in meta_lookup and meta_lookup[(dtype, value)]:
+                    meta_entry = meta_lookup[(dtype, value)].pop(0)
+
+                hinted_line = meta_entry.get('line') if meta_entry else None
+                username = meta_entry.get('username') if meta_entry else None
+                line_number = _line_from_value(file_path, value, hinted_line)
+                if not username:
+                    username = _guess_username(file_path, line_number, value)
+
+                entry = {
+                    'value': value,
+                    'file': file_path,
+                }
+                if line_number is not None:
+                    entry['line'] = line_number
+                if username:
+                    entry['username'] = username
+
+                # Deduplicate entries
+                if any(
+                    existing.get('value') == entry['value']
+                    and existing.get('file') == entry['file']
+                    and existing.get('line') == entry.get('line')
+                    for existing in cat_entries
+                ):
+                    continue
+                cat_entries.append(entry)
 
     # Remove empty groups
-    return {k: v for k, v in groups.items() if any(isinstance(s, set) and s for s in v.values())}
+    pruned: Dict[str, Dict[str, Any]] = {}
+    for name, payload in groups.items():
+        categories = {k: v for k, v in payload['categories'].items() if v}
+        entries = {k: v for k, v in payload['entries'].items() if v}
+        if categories or entries:
+            pruned[name] = {'categories': categories, 'entries': entries}
+    return pruned
 
 def format_dir_summary(all_results: Dict[str, Dict[str, Set[str]]], root: Optional[Path] = None,
                        colors: Optional[Dict] = None) -> str:
@@ -732,6 +880,19 @@ def create_html_report(results: Dict[str, Set[str]], api_structure: Optional[Dic
         </section>
     """
     
+    metadata_lookup: Dict[str, List[Dict[str, Any]]] = {}
+    if '__meta__' in results and isinstance(results['__meta__'], dict):
+        metadata_lookup = {k: list(v) for k, v in results['__meta__'].items() if isinstance(v, list)}
+
+    def _consume_metadata(dtype: str, value: str) -> Optional[Dict[str, Any]]:
+        entries = metadata_lookup.get(dtype)
+        if not entries:
+            return None
+        for idx, entry in enumerate(entries):
+            if entry.get('value') == value:
+                return entries.pop(idx)
+        return None
+
     # Add findings sections
     findings_added = False
     
@@ -782,8 +943,17 @@ def create_html_report(results: Dict[str, Set[str]], api_structure: Optional[Dic
                     value_class = severity_class
                     if data_type in ['api_endpoint', 'url']:
                         value_class = "api-endpoint"
-                    
-                    html_content += f'<div class="value {value_class}">{value}</div>'
+                    meta_entry = _consume_metadata(data_type, value)
+                    meta_bits: List[str] = []
+                    if meta_entry:
+                        if 'line' in meta_entry:
+                            meta_bits.append(f"line {meta_entry['line']}")
+                        if 'username' in meta_entry:
+                            meta_bits.append(f"user {meta_entry['username']}")
+                    meta_html = ''
+                    if meta_bits:
+                        meta_html = f"<div class='meta'>{' • '.join(meta_bits)}</div>"
+                    html_content += f'<div class="value {value_class}">{value}{meta_html}</div>'
                 
                 html_content += '''
                         </div>

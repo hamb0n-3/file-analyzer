@@ -104,9 +104,9 @@ def parse_arguments():
     file_p.add_argument('paths', nargs='+', help='Path(s) to file(s) to analyze')
     file_p.add_argument('--plugins', help='Comma-separated plugin groups: code, api(web), endpoints(network), json, xml, secret, crypto, ml, all')
     file_p.add_argument('--md', action='store_true', help='Output in markdown format (wrapped in triple backticks)')
-    file_p.add_argument('--json', help='Export results to JSON file')
-    file_p.add_argument('--html', help='Export results to HTML report')
-    file_p.add_argument('--csv', help='Export results to CSV file')
+    file_p.add_argument('--json', action='store_true', help='Also export results to JSON files')
+    file_p.add_argument('--html', action='store_true', help='Also export results to HTML reports')
+    file_p.add_argument('--csv', action='store_true', help='Also export results to CSV files')
     file_p.add_argument('--output-dir', help='Directory to store all output files')
     file_p.add_argument('--quiet', action='store_true', help='Suppress terminal output')
     file_p.add_argument('--summary-only', action='store_true', help='Show only summary information')
@@ -120,9 +120,9 @@ def parse_arguments():
     dir_p.add_argument('--include', action='append', help='Include only file pattern (glob syntax, can be used multiple times)')
     dir_p.add_argument('--max-size', type=int, default=100, help='Maximum file size to analyze in MB (default: 100)')
     dir_p.add_argument('--md', action='store_true', help='Output in markdown format (wrapped in triple backticks)')
-    dir_p.add_argument('--json', help='Export results to JSON file (per-file when multiple)')
-    dir_p.add_argument('--html', help='Export results to HTML report (per-file when multiple)')
-    dir_p.add_argument('--csv', help='Export results to CSV file (per-file when multiple)')
+    dir_p.add_argument('--json', action='store_true', help='Also export results to JSON files')
+    dir_p.add_argument('--html', action='store_true', help='Also export results to HTML reports')
+    dir_p.add_argument('--csv', action='store_true', help='Also export results to CSV files')
     dir_p.add_argument('--output-dir', help='Directory to store all output files')
     dir_p.add_argument('--quiet', action='store_true', help='Suppress terminal output')
     dir_p.add_argument('--summary-only', action='store_true', help='Show only summary information')
@@ -131,9 +131,9 @@ def parse_arguments():
     parser.add_argument('file_paths', nargs='*', help='[Deprecated] Path(s) to the file(s) to analyze')
     parser.add_argument('--dir', help='[Deprecated] Analyze all files in directory (recursively)')
     parser.add_argument('--md', action='store_true', help='Output in markdown format (wrapped in triple backticks)')
-    parser.add_argument('--json', help='Export results to JSON file')
-    parser.add_argument('--html', help='Export results to HTML report')
-    parser.add_argument('--csv', help='Export results to CSV file')
+    parser.add_argument('--json', action='store_true', help='Also export results to JSON files')
+    parser.add_argument('--html', action='store_true', help='Also export results to HTML reports')
+    parser.add_argument('--csv', action='store_true', help='Also export results to CSV files')
     parser.add_argument('--output-dir', help='Directory to store all output files')
     parser.add_argument('--quiet', action='store_true', help='Suppress terminal output')
     parser.add_argument('--summary-only', action='store_true', help='Show only summary information')
@@ -532,6 +532,58 @@ def _filter_results_by_plugins(all_results: Dict[str, Dict[str, set]], plugins_v
     return filtered
 
 
+def _ensure_parent(path: Path) -> None:
+    if path.parent and not path.parent.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _write_text_file(path: Path, content: str) -> None:
+    _ensure_parent(path)
+    # Ensure newline termination for readability
+    if content and not content.endswith("\n"):
+        content = content + "\n"
+    path.write_text(content, encoding='utf-8')
+
+
+def _format_plugin_text(plugin_name: str, results: Dict[str, Any]) -> str:
+    header = f"Plugin: {plugin_name}"
+    lines = [header, "=" * len(header), ""]
+    entries_map: Dict[str, List[Dict[str, Any]]] = results.get('entries', {}) if isinstance(results, dict) else {}
+    categories_map: Dict[str, Set[str]] = results.get('categories', {}) if isinstance(results, dict) else {}
+    has_values = any(entries_map.get(k) for k in entries_map)
+
+    for category in sorted(entries_map.keys()):
+        cat_entries = entries_map.get(category) or []
+        if not cat_entries:
+            continue
+        lines.append(f"[{category}]")
+        for entry in cat_entries:
+            location = entry.get('file')
+            if entry.get('line') is not None:
+                location = f"{location}:{entry['line']}"
+            value = entry.get('value', '')
+            lines.append(f"  - value: {value}")
+            lines.append(f"    location: {location}")
+            if entry.get('username'):
+                lines.append(f"    possible owner: {entry['username']}")
+        lines.append("")
+
+    if not has_values and categories_map:
+        for category in sorted(categories_map.keys()):
+            values = sorted(categories_map[category])
+            if not values:
+                continue
+            lines.append(f"[{category}]")
+            for value in values:
+                lines.append(f"  - value: {value}")
+            lines.append("")
+        has_values = bool(categories_map)
+
+    if not has_values:
+        lines.append("No findings detected.")
+    return "\n".join(lines).strip() + "\n"
+
+
 def export_all_results(all_results: Dict[str, Dict[str, set]], args):
     """
     Export results for all analyzed files based on command line arguments.
@@ -565,12 +617,19 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args):
 
                 for plugin_name, agg_results in plugin_buckets.items():
                     base = out_dir / f"plugin-{plugin_name}"
+                    text_path = _suffix_path(base, '.txt')
+                    try:
+                        _write_text_file(text_path, _format_plugin_text(plugin_name, agg_results))
+                        logging.info(f"Wrote plugin text report: {text_path}")
+                    except Exception as exc:
+                        logging.warning(f"Failed writing plugin text report {plugin_name}: {exc}")
+                    categories = agg_results.get('categories', {}) if isinstance(agg_results, dict) else {}
                     if args.json:
-                        export_results_json(agg_results, str(_suffix_path(base, '.json')))
+                        export_results_json(categories, str(_suffix_path(base, '.json')))
                     if args.html:
-                        create_html_report(agg_results, None, str(_suffix_path(base, '.html')))
+                        create_html_report(categories, None, str(_suffix_path(base, '.html')))
                     if args.csv:
-                        create_csv_report(agg_results, str(_suffix_path(base, '.csv')))
+                        create_csv_report(categories, str(_suffix_path(base, '.csv')))
                 logging.info(
                     f"Wrote plugin-aggregated reports: {', '.join(sorted(plugin_buckets.keys()))}"
                 )
@@ -583,24 +642,15 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args):
 
             # Generate output paths
             if args.json:
-                if len(all_results) > 1:
-                    json_path = generate_output_path(args, file_path, ".json")
-                else:
-                    json_path = args.json
+                json_path = generate_output_path(args, file_path, ".json")
                 export_results_json(results, json_path)
 
             if args.html:
-                if len(all_results) > 1:
-                    html_path = generate_output_path(args, file_path, ".html")
-                else:
-                    html_path = args.html
+                html_path = generate_output_path(args, file_path, ".html")
                 create_html_report(results, None, html_path)
 
             if args.csv:
-                if len(all_results) > 1:
-                    csv_path = generate_output_path(args, file_path, ".csv")
-                else:
-                    csv_path = args.csv
+                csv_path = generate_output_path(args, file_path, ".csv")
                 create_csv_report(results, csv_path)
 
             # Always write a human-readable text or markdown report when output_dir is set
@@ -623,24 +673,22 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args):
         try:
             out_dir = Path(args.output_dir) if args.output_dir else Path.cwd()
             out_dir.mkdir(parents=True, exist_ok=True)
-            # JSON and HTML summaries
-            export_dir_summary_json(all_results, str(out_dir / 'summary.json'), root=Path(getattr(args, 'path', args.dir)))
-            create_dir_summary_html(all_results, str(out_dir / 'summary.html'), root=Path(getattr(args, 'path', args.dir)))
-            logging.info("Wrote directory summaries: summary.json, summary.html")
-            # Also write a plaintext/markdown summary if output_dir is set
-            if args.output_dir:
-                try:
-                    colors = setup_colored_output()
-                    summary_txt = format_dir_summary(all_results, root=Path(getattr(args, 'path', args.dir)), colors=colors)
-                    # Strip color codes
-                    import re as _re
-                    ansi = _re.compile(r"\x1b\[[0-9;]*m")
-                    summary_plain = ansi.sub("", summary_txt)
-                    (out_dir / ('summary.md' if args.md else 'summary.txt')).write_text(summary_plain, encoding='utf-8')
-                except Exception as e:
-                    logging.warning(f"Failed to write plaintext summary: {e}")
+            root_arg = getattr(args, 'path', None) or getattr(args, 'dir', None)
+            root_path = Path(root_arg) if root_arg else None
+
+            if args.json:
+                export_dir_summary_json(all_results, str(out_dir / 'summary.json'), root=root_path)
+            if args.html:
+                create_dir_summary_html(all_results, str(out_dir / 'summary.html'), root=root_path)
+
+            try:
+                summary_txt = format_dir_summary(all_results, root=root_path, colors=None)
+                _write_text_file(out_dir / 'summary.txt', summary_txt)
+                logging.info("Wrote directory summary text: summary.txt")
+            except Exception as exc:
+                logging.warning(f"Failed to write summary text report: {exc}")
         except Exception as e:
-            logging.warning(f"Failed to write directory summary: {e}")
+            logging.warning(f"Failed to write directory summary artifacts: {e}")
 
 
 def main():
