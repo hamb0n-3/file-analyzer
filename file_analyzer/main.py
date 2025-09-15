@@ -290,8 +290,8 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
         num_workers = max(1, multiprocessing.cpu_count() - 1)  # Leave one CPU free
     num_workers = min(num_workers, total_files)  # Don't use more workers than files
     
-    # Suppress interactive progress when writing to output dir
-    if not args.quiet and not getattr(args, 'output_dir', None):
+    show_progress = not args.quiet
+    if show_progress:
         print(f"\n{colors['bold']('Analyzing')} {total_files} files with {num_workers} workers...")
     
     if total_files == 0:
@@ -299,11 +299,10 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
     
     # Use progress bar if available and not in quiet mode
     try:
-        if not args.quiet and not getattr(args, 'output_dir', None):
+        progress_bar = None
+        if show_progress:
             from tqdm import tqdm
             progress_bar = tqdm(total=total_files, desc="Analyzing files", unit="file")
-        else:
-            progress_bar = None
             
         if num_workers > 1 and total_files > 1:
             # Process files in parallel using a persistent process pool
@@ -367,7 +366,6 @@ def analyze_files(files: List[Path], config: Dict[str, Any], args) -> Dict[str, 
                 self.stream.write(f"[{self.completed}/{self.total}]{suffix}\n")
                 self.stream.flush()
 
-        show_progress = not args.quiet and not getattr(args, 'output_dir', None)
         progress = _SimpleProgress(total_files, show_progress)
 
         fa = FileAnalyzer(config)

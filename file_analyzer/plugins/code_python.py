@@ -118,19 +118,19 @@ class PythonCodeAnalyzer(AnalyzerPlugin):
 
             if self._is_python2_print_error(msg):
                 converted = self._convert_python2_prints(content)
+                if not converted:
+                    converted = self._fallback_convert_prints(content)
                 if converted and converted != content:
                     try:
                         tree = ast.parse(converted)
                         results.setdefault('code_quality', set()).add(
                             f"Detected Python 2 print statements; auto-converted for analysis (line {line_no})"
                         )
-                        logging.info(f"Auto-converted Python 2 print statements in {file_path}: {msg}")
+                        logging.debug(f"Auto-converted Python 2 print statements in {file_path}")
                         return tree, converted
                     except SyntaxError as retry_err:
-                        logging.info(f"Python 2-style print in {file_path}: {msg}")
                         logging.debug(f"Conversion parse failed for {file_path}: {retry_err}")
-                else:
-                    logging.info(f"Python 2-style print in {file_path}: {msg}")
+                logging.debug(f"Python 2-style print in {file_path}: {msg}")
                 results.setdefault('code_quality', set()).add(
                     f"Likely Python 2 print syntax (line {line_no})"
                 )
@@ -158,6 +158,37 @@ class PythonCodeAnalyzer(AnalyzerPlugin):
         except Exception as exc:
             logging.debug(f"Failed to convert Python 2 print statements: {exc}")
             return None
+
+    def _fallback_convert_prints(self, content: str) -> Optional[str]:
+        """Simple heuristic fallback for converting basic print statements."""
+        converted_lines = []
+        changed = False
+        for line in content.splitlines():
+            stripped = line.lstrip()
+            indent_len = len(line) - len(stripped)
+            indent = line[:indent_len]
+
+            if stripped.startswith('print ') and not stripped.startswith('print('):
+                argument = stripped[6:]
+                if argument.endswith(','):
+                    # Preserve trailing comma semantics by adding end=' '
+                    argument = argument[:-1].rstrip()
+                    converted_lines.append(f"{indent}print({argument}, end=' ')")
+                else:
+                    converted_lines.append(f"{indent}print({argument})")
+                changed = True
+            elif stripped.startswith('print\t'):
+                # Tabs as whitespace
+                argument = stripped[6:]
+                converted_lines.append(f"{indent}print({argument})")
+                changed = True
+            else:
+                converted_lines.append(line)
+
+        if not changed:
+            return None
+
+        return "\n".join(converted_lines) + ("\n" if content.endswith("\n") else "")
 
     def _analyze_ast_security(self, tree: ast.AST, content: str, results: Dict[str, Set[str]]) -> None:
         class SecurityVisitor(ast.NodeVisitor):
