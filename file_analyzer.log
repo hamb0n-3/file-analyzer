@@ -2,3 +2,12 @@
 2025-09-15 14:58:58,091 - INFO - root - Radon not available, skipping complexity analysis
 2025-09-15 15:01:12,652 - INFO - root - Radon not available, skipping complexity analysis
 2025-09-15 15:01:12,686 - INFO - root - Radon not available, skipping complexity analysis
+2025-09-16 12:52:59,668 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-16 12:53:10,599 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-16 12:53:57,838 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-16 12:54:05,338 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-16 12:55:29,043 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-16 12:55:29,056 - INFO - root - Wrote summary JSON: tmp_output/summary.json
+2025-09-16 12:55:29,057 - INFO - root - Wrote summary text: tmp_output/summary.txt
+2025-09-16 12:55:29,057 - INFO - root - Wrote aggregated plugin text: tmp_output/plugins-output.txt
+2025-09-16 12:55:29,057 - INFO - root - Wrote aggregated plugin JSON: tmp_output/plugins-output.json
