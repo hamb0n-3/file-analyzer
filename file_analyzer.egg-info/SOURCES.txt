@@ -23,7 +23,6 @@ file_analyzer/plugins/crypto_hashes.py
 file_analyzer/plugins/endpoints.py
 file_analyzer/plugins/json_analyzer.py
 file_analyzer/plugins/plugin_registry.py
-file_analyzer/plugins/sensitive.py
 file_analyzer/plugins/web.py
 file_analyzer/plugins/xml_analyzer.py
 file_analyzer/utils/__init__.py

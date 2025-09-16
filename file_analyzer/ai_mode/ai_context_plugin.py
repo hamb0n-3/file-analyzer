@@ -24,9 +24,13 @@ import logging
 import math
 import os
 import re
+import sys
+import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 try:
     from base_plugin import AnalyzerPlugin  # type: ignore
@@ -46,7 +50,7 @@ except Exception:  # pragma: no cover - fallback for standalone usage
 class OllamaLLM:
     """Minimal wrapper around the `ollama` Python client."""
 
-    def __init__(self, model: str = "llama3.2:3b", host: Optional[str] = None) -> None:
+    def __init__(self, model: str = "qwen3-4b:latest", host: Optional[str] = None) -> None:
         self.model = model
         if host:
             os.environ["OLLAMA_HOST"] = host
@@ -193,7 +197,7 @@ class SecretsContextPlugin(AnalyzerPlugin):
     supported_file_types = ("json",)
     name = "SecretsContextPlugin"
 
-    def __init__(self, model: str = "llama3.2:3b", use_llm: bool = True, ollama_host: Optional[str] = None) -> None:
+    def __init__(self, model: str = "qwen3-4b:latest", use_llm: bool = True, ollama_host: Optional[str] = None) -> None:
         self.model = model
         self.use_llm = use_llm
         self.ollama_host = ollama_host
@@ -217,17 +221,75 @@ class SecretsContextPlugin(AnalyzerPlugin):
         manifest = self._load_manifest(file_path, content)
         analyses: List[SecretAnalysis] = []
         llm_annotations: List[Optional[Dict[str, Any]]] = []
+        total_items = len(manifest)
+        failures = 0
+        llm_attempts = 0
+        llm_successes = 0
+        start_time = time.perf_counter()
+        progress_bar = self._start_progress_bar(total_items)
+        text_progress_active = False
+        if progress_bar is None and total_items > 0 and sys.stderr.isatty():
+            text_progress_active = True
+            print(f"Enriching secrets: 0/{total_items}", end="", file=sys.stderr, flush=True)
 
         for idx, item in enumerate(manifest):
+            llm_attempted = False
             try:
-                analysis, llm_info = self._analyze_one(item, idx)
+                analysis, llm_info, llm_attempted = self._analyze_one(item, idx)
             except Exception as exc:
+                failures += 1
                 logging.exception("Failed to analyze secret #%s: %s", idx, exc)
-                continue
-            analyses.append(analysis)
-            llm_annotations.append(llm_info)
+            else:
+                analyses.append(analysis)
+                llm_annotations.append(llm_info)
+                if llm_attempted:
+                    llm_attempts += 1
+                    if llm_info:
+                        llm_successes += 1
+            finally:
+                if progress_bar:
+                    progress_bar.update(1)
+                elif text_progress_active:
+                    current = idx + 1
+                    percent = (current / total_items) * 100 if total_items else 100
+                    print(
+                        f"\rEnriching secrets: {current}/{total_items} ({percent:5.1f}%)",
+                        end="",
+                        file=sys.stderr,
+                        flush=True,
+                    )
 
-        result_json = self._build_output(file_path, analyses)
+        if progress_bar:
+            progress_bar.close()
+        elif text_progress_active:
+            print(file=sys.stderr)
+
+        elapsed = time.perf_counter() - start_time
+        processed = len(analyses)
+        llm_failures = max(llm_attempts - llm_successes, 0)
+        llm_skipped = max(processed - llm_attempts, 0)
+        stats: Dict[str, Any] = {
+            "total_secrets": total_items,
+            "processed": processed,
+            "failures": failures,
+            "llm_attempts": llm_attempts,
+            "llm_successes": llm_successes,
+            "llm_failures": llm_failures,
+            "llm_skipped": llm_skipped,
+            "duration_seconds": round(elapsed, 3),
+        }
+        if elapsed > 0:
+            stats["secrets_per_second"] = round(processed / elapsed, 3)
+
+        stats_message = (
+            "Secrets enrichment stats | total=%d | processed=%d | failures=%d | llm=%d/%d | duration=%.2fs"
+            % (total_items, processed, failures, llm_successes, llm_attempts, elapsed)
+        )
+        logger.info(stats_message)
+        if sys.stderr.isatty():
+            print(stats_message, file=sys.stderr)
+
+        result_json = self._build_output(file_path, analyses, stats)
 
         if results_collector and hasattr(results_collector, "add_result"):
             for analysis, llm_info in zip(analyses, llm_annotations):
@@ -271,7 +333,9 @@ class SecretsContextPlugin(AnalyzerPlugin):
                 items.append(SecretInput(file=str(file_value), value=str(secret_value), hint=hint, line=line))
         return items
 
-    def _analyze_one(self, item: SecretInput, idx: int) -> Tuple[SecretAnalysis, Optional[Dict[str, Any]]]:
+    def _analyze_one(
+        self, item: SecretInput, idx: int
+    ) -> Tuple[SecretAnalysis, Optional[Dict[str, Any]], bool]:
         source_path = Path(item.file)
         if not str(source_path).startswith("s3://"):
             source_path = source_path.expanduser().resolve()
@@ -289,7 +353,9 @@ class SecretsContextPlugin(AnalyzerPlugin):
         entropy = shannon_entropy(item.value)
 
         llm_details: Optional[Dict[str, Any]] = None
+        llm_attempted = False
         if self.use_llm:
+            llm_attempted = True
             try:
                 llm_client = self._ensure_ollama()
                 llm_details = llm_client.classify(item.value, language, snippet)
@@ -308,12 +374,22 @@ class SecretsContextPlugin(AnalyzerPlugin):
             context_snippet=snippet,
             var_name=var_name,
         )
-        return analysis, llm_details
+        return analysis, llm_details, llm_attempted
 
     def _ensure_ollama(self) -> OllamaLLM:
         if self._ollama_client is None:
             self._ollama_client = OllamaLLM(model=self.model, host=self.ollama_host)
         return self._ollama_client
+
+    @staticmethod
+    def _start_progress_bar(total: int) -> Optional[Any]:
+        if total <= 0:
+            return None
+        try:
+            from tqdm import tqdm  # type: ignore
+        except Exception:
+            return None
+        return tqdm(total=total, desc="Enriching secrets", unit="secret")
 
     @staticmethod
     def _guess_var_name(item: SecretInput, text: str, occurrences: List[Tuple[int, int]]) -> Optional[str]:
@@ -351,13 +427,16 @@ class SecretsContextPlugin(AnalyzerPlugin):
             snippet_lines.append(f"{line_no:>5}: {lines[line_no - 1]}")
         return "\n".join(snippet_lines)
 
-    def _build_output(self, manifest_path: Path, analyses: List[SecretAnalysis]) -> Dict[str, Any]:
+    def _build_output(
+        self, manifest_path: Path, analyses: List[SecretAnalysis], stats: Dict[str, Any]
+    ) -> Dict[str, Any]:
         return {
             "version": "1.0",
             "plugin": self.name,
             "generated_at": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
             "inputs": {"manifest_path": str(manifest_path)},
             "results": [analysis.to_dict() for analysis in analyses],
+            "statistics": stats,
         }
 
 

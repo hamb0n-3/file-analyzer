@@ -13,7 +13,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from ..plugins.sensitive import Rule, load_rules
+from ..plugins.secrets import Rule, load_rules
 from .helpers import (
     TEXT_EXTENSIONS, DEFAULT_EXCLUDES, is_probably_text, shannon_entropy,
     mask_secret, rel_to, fingerprint, should_skip
