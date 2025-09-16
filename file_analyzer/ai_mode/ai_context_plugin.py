@@ -28,7 +28,7 @@ import sys
 import time
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,12 @@ except Exception:  # pragma: no cover - fallback for standalone usage
 class OllamaLLM:
     """Minimal wrapper around the `ollama` Python client."""
 
+    SYSTEM_PROMPT = (
+        "You are a security assistant. Given a raw secret value and a short context snippet, "
+        "classify the likely type and provider. Respond with strict JSON containing keys: "
+        "type, provider, confidence, severity, is_placeholder, usage, reasoning."
+    )
+
     def __init__(self, model: str = "qwen3-4b:latest", host: Optional[str] = None) -> None:
         self.model = model
         if host:
@@ -60,14 +66,9 @@ class OllamaLLM:
             raise RuntimeError("The 'ollama' package is required for LLM classification") from exc
         self._client = ollama
 
-    def classify(self, raw_secret: str, language: str, context_snippet: str) -> Optional[Dict[str, Any]]:
-        system_prompt = (
-            "You are a security assistant. Given a raw secret value and a short context snippet, "
-            "classify the likely type and provider. Respond with strict JSON containing keys: "
-            "type, provider, confidence, severity, is_placeholder, usage, reasoning."
-        )
-        messages = [
-            {"role": "system", "content": system_prompt},
+    def build_messages(self, raw_secret: str, language: str, context_snippet: str) -> List[Dict[str, str]]:
+        return [
+            {"role": "system", "content": self.SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": (
@@ -79,6 +80,16 @@ class OllamaLLM:
             },
         ]
 
+    def classify(
+        self,
+        raw_secret: str,
+        language: str,
+        context_snippet: str,
+        *,
+        messages: Optional[List[Dict[str, str]]] = None,
+        preview_callback: Optional[Callable[[List[Dict[str, str]], str, Optional[Dict[str, Any]]], None]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        messages = messages or self.build_messages(raw_secret, language, context_snippet)
         try:
             response = self._client.chat(model=self.model, messages=messages)
         except Exception as exc:
@@ -86,10 +97,15 @@ class OllamaLLM:
             return None
 
         content = (response or {}).get("message", {}).get("content", "")
-        if not content:
-            return None
-
-        return self._parse_json_response(content)
+        parsed: Optional[Dict[str, Any]] = None
+        if content:
+            parsed = self._parse_json_response(content)
+        if preview_callback:
+            try:
+                preview_callback(messages, content, parsed)
+            except Exception:
+                logging.debug("Preview callback raised an exception", exc_info=True)
+        return parsed
 
     @staticmethod
     def _parse_json_response(raw: str) -> Optional[Dict[str, Any]]:
@@ -197,11 +213,19 @@ class SecretsContextPlugin(AnalyzerPlugin):
     supported_file_types = ("json",)
     name = "SecretsContextPlugin"
 
-    def __init__(self, model: str = "qwen3-4b:latest", use_llm: bool = True, ollama_host: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        model: str = "qwen3-4b:latest",
+        use_llm: bool = True,
+        ollama_host: Optional[str] = None,
+        preview_count: int = 0,
+    ) -> None:
         self.model = model
         self.use_llm = use_llm
         self.ollama_host = ollama_host
         self._ollama_client: Optional[OllamaLLM] = None
+        self.preview_count = max(0, int(preview_count or 0))
+        self._preview_shown = 0
 
     def can_analyze(self, file_path: Path, file_type: str, content: Optional[str] = None) -> bool:
         if (file_type or "").lower() != "json":
@@ -221,6 +245,7 @@ class SecretsContextPlugin(AnalyzerPlugin):
         manifest = self._load_manifest(file_path, content)
         analyses: List[SecretAnalysis] = []
         llm_annotations: List[Optional[Dict[str, Any]]] = []
+        self._preview_shown = 0
         total_items = len(manifest)
         failures = 0
         llm_attempts = 0
@@ -358,7 +383,18 @@ class SecretsContextPlugin(AnalyzerPlugin):
             llm_attempted = True
             try:
                 llm_client = self._ensure_ollama()
-                llm_details = llm_client.classify(item.value, language, snippet)
+                preview_callback = None
+                llm_messages: Optional[List[Dict[str, str]]] = None
+                if self.preview_count and self._preview_shown < self.preview_count:
+                    llm_messages = llm_client.build_messages(item.value, language, snippet)
+                    preview_callback = self._make_preview_callback(idx, item, language)
+                llm_details = llm_client.classify(
+                    item.value,
+                    language,
+                    snippet,
+                    messages=llm_messages,
+                    preview_callback=preview_callback,
+                )
             except Exception as exc:
                 logging.warning("LLM classification unavailable: %s", exc)
                 llm_details = None
@@ -380,6 +416,46 @@ class SecretsContextPlugin(AnalyzerPlugin):
         if self._ollama_client is None:
             self._ollama_client = OllamaLLM(model=self.model, host=self.ollama_host)
         return self._ollama_client
+
+    def _make_preview_callback(
+        self,
+        index: int,
+        item: SecretInput,
+        language: str,
+    ) -> Callable[[List[Dict[str, str]], str, Optional[Dict[str, Any]]], None]:
+        secret_label = f"secret-{index + 1}"
+        file_display = item.file
+
+        def _preview(
+            sent_messages: List[Dict[str, str]],
+            raw_response: str,
+            parsed_response: Optional[Dict[str, Any]],
+        ) -> None:
+            if self._preview_shown >= self.preview_count:
+                return
+            self._preview_shown += 1
+            print("", file=sys.stderr)
+            print(
+                f"[LLM preview {self._preview_shown}/{self.preview_count}] {secret_label} | file={file_display} | language={language}",
+                file=sys.stderr,
+            )
+            print("-- Request --", file=sys.stderr)
+            for message in sent_messages:
+                role = message.get("role", "?")
+                content = (message.get("content") or "").rstrip()
+                print(f"{role}:", file=sys.stderr)
+                print(content or "<empty>", file=sys.stderr)
+                print("---", file=sys.stderr)
+            print("-- Raw Response --", file=sys.stderr)
+            response_text = raw_response.rstrip()
+            print(response_text or "<empty>", file=sys.stderr)
+            if parsed_response is not None:
+                print("-- Parsed JSON --", file=sys.stderr)
+                print(json.dumps(parsed_response, indent=2), file=sys.stderr)
+            print("=" * 40, file=sys.stderr)
+            sys.stderr.flush()
+
+        return _preview
 
     @staticmethod
     def _start_progress_bar(total: int) -> Optional[Any]:

@@ -107,6 +107,14 @@ def parse_arguments():
     ai_p = subparsers.add_parser('ai', help='Enrich a secrets manifest with file context')
     ai_p.add_argument('-i', '--input-file', required=True, help='Path to the secrets manifest JSON file')
     ai_p.add_argument('-o', '--output-file', required=True, help='Path to write the enriched JSON report')
+    ai_p.add_argument(
+        '--preview',
+        nargs='?',
+        const=1,
+        type=int,
+        default=0,
+        help='Show the LLM request/response for the first N secrets (default N=1 when flag provided).',
+    )
 
     # file subcommand
     file_p = subparsers.add_parser('file', help='Analyze one or more files')
@@ -1065,7 +1073,10 @@ def main():
             print(f"{colors['red']('Error: manifest not found')} -> {manifest_path}")
             return 1
 
-        plugin = SecretsContextPlugin()
+        preview_count = getattr(args, 'preview', 0) or 0
+        if preview_count < 0:
+            preview_count = 0
+        plugin = SecretsContextPlugin(preview_count=preview_count)
         try:
             report = plugin.run_from_manifest_path(manifest_path)
         except Exception as exc:
