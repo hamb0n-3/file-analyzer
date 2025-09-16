@@ -1,0 +1,367 @@
+#!/usr/bin/env python3
+"""
+Secrets Context Plugin
+
+A drop-in, standalone plugin that:
+  • Reads a manifest JSON describing discovered secrets, each with file locations and the secret value.
+  • Opens the referenced files, finds the secret in-context, and extracts useful context (variable name, nearby lines, etc.).
+  • (Optionally) calls a local LLM through Ollama to classify each secret, but the classification metadata stays out of the exported JSON.
+  • Emits a final JSON in a stable, explicit format containing the original secret value and surrounding context.
+
+It is designed to work in two modes:
+  1) Standalone CLI (see run_secrets_plugin.py)
+  2) As a plugin class compatible with a typical AnalyzerPlugin interface (if present).
+
+Security notes:
+  • Secrets are processed and, when LLM classification is enabled, forwarded to Ollama exactly as provided.
+"""
+
+from __future__ import annotations
+
+import datetime
+import json
+import logging
+import math
+import os
+import re
+from dataclasses import dataclass, asdict
+from pathlib import Path
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+try:
+    from base_plugin import AnalyzerPlugin  # type: ignore
+except Exception:  # pragma: no cover - fallback for standalone usage
+    class AnalyzerPlugin:  # type: ignore
+        plugin_type: str = "semantic"
+        supported_file_types: Iterable[str] = ("json",)
+        name: str = "SecretsContextPlugin"
+
+        def can_analyze(self, file_path: Path, file_type: str, content: Optional[str] = None) -> bool:
+            raise NotImplementedError
+
+        def analyze(self, file_path: Path, file_type: str, content: str, results_collector=None) -> Dict[str, Any]:
+            raise NotImplementedError
+
+
+class OllamaLLM:
+    """Minimal wrapper around the `ollama` Python client."""
+
+    def __init__(self, model: str = "llama3.2:3b", host: Optional[str] = None) -> None:
+        self.model = model
+        if host:
+            os.environ["OLLAMA_HOST"] = host
+        try:
+            import ollama  # type: ignore
+        except ImportError as exc:  # pragma: no cover - depends on runtime env
+            raise RuntimeError("The 'ollama' package is required for LLM classification") from exc
+        self._client = ollama
+
+    def classify(self, raw_secret: str, language: str, context_snippet: str) -> Optional[Dict[str, Any]]:
+        system_prompt = (
+            "You are a security assistant. Given a raw secret value and a short context snippet, "
+            "classify the likely type and provider. Respond with strict JSON containing keys: "
+            "type, provider, confidence, severity, is_placeholder, usage, reasoning."
+        )
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user",
+                "content": (
+                    f"LANGUAGE: {language}\n"
+                    f"SECRET: {raw_secret}\n"
+                    f"CONTEXT:\n{context_snippet}\n"
+                    "Reply with JSON only."
+                ),
+            },
+        ]
+
+        try:
+            response = self._client.chat(model=self.model, messages=messages)
+        except Exception as exc:
+            logging.warning("Ollama chat failed: %s", exc)
+            return None
+
+        content = (response or {}).get("message", {}).get("content", "")
+        if not content:
+            return None
+
+        return self._parse_json_response(content)
+
+    @staticmethod
+    def _parse_json_response(raw: str) -> Optional[Dict[str, Any]]:
+        try:
+            return json.loads(raw)
+        except Exception:
+            match = re.search(r"\{.*\}", raw, re.DOTALL)
+            if not match:
+                logging.debug("Failed to locate JSON payload in LLM response")
+                return None
+            try:
+                return json.loads(match.group(0))
+            except Exception:
+                logging.debug("Failed to parse JSON payload extracted from LLM response")
+                return None
+
+
+def shannon_entropy(value: str) -> float:
+    if not value:
+        return 0.0
+    counts: Dict[str, int] = {}
+    for ch in value:
+        counts[ch] = counts.get(ch, 0) + 1
+    entropy = 0.0
+    length = len(value)
+    for count in counts.values():
+        probability = count / length
+        entropy -= probability * math.log2(probability)
+    return entropy
+
+
+def detect_language_from_ext(path: Path) -> str:
+    return {
+        ".py": "python",
+        ".js": "javascript",
+        ".ts": "typescript",
+        ".json": "json",
+        ".yml": "yaml",
+        ".yaml": "yaml",
+        ".env": "dotenv",
+        ".rb": "ruby",
+        ".go": "go",
+        ".java": "java",
+        ".cs": "csharp",
+        ".php": "php",
+        ".sh": "shell",
+        ".ps1": "powershell",
+        ".toml": "toml",
+        ".ini": "ini",
+        ".cfg": "ini",
+        ".txt": "text",
+        ".md": "markdown",
+    }.get(path.suffix.lower(), "text")
+
+
+def find_occurrences(text: str, needle: str) -> List[Tuple[int, int]]:
+    matches: List[Tuple[int, int]] = []
+    if not text or not needle:
+        return matches
+    for line_no, line in enumerate(text.splitlines(), start=1):
+        column = line.find(needle)
+        if column != -1:
+            matches.append((line_no, column + 1))
+    return matches
+
+
+def read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        try:
+            return path.read_text(encoding="latin-1", errors="ignore")
+        except Exception:
+            return ""
+
+
+@dataclass
+class SecretInput:
+    file: str
+    value: str
+    hint: Optional[str] = None
+    line: Optional[int] = None
+
+
+@dataclass
+class SecretAnalysis:
+    id: str
+    source_file: str
+    language: str
+    secret_value: str
+    secret_length: int
+    secret_entropy: float
+    occurrences: List[Dict[str, int]]
+    context_snippet: str
+    var_name: Optional[str]
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+class SecretsContextPlugin(AnalyzerPlugin):
+    """Plugin that parses a manifest JSON of discovered secrets and enriches each with code context."""
+
+    plugin_type = "semantic"
+    supported_file_types = ("json",)
+    name = "SecretsContextPlugin"
+
+    def __init__(self, model: str = "llama3.2:3b", use_llm: bool = True, ollama_host: Optional[str] = None) -> None:
+        self.model = model
+        self.use_llm = use_llm
+        self.ollama_host = ollama_host
+        self._ollama_client: Optional[OllamaLLM] = None
+
+    def can_analyze(self, file_path: Path, file_type: str, content: Optional[str] = None) -> bool:
+        if (file_type or "").lower() != "json":
+            return False
+        try:
+            data = json.loads(content or read_text(file_path))
+        except Exception:
+            return False
+        if isinstance(data, dict):
+            container = data.get("secrets") or data.get("entries") or data.get("items")
+            return isinstance(container, list)
+        if isinstance(data, list):
+            return True
+        return False
+
+    def analyze(self, file_path: Path, file_type: str, content: str, results_collector=None) -> Dict[str, Any]:
+        manifest = self._load_manifest(file_path, content)
+        analyses: List[SecretAnalysis] = []
+        llm_annotations: List[Optional[Dict[str, Any]]] = []
+
+        for idx, item in enumerate(manifest):
+            try:
+                analysis, llm_info = self._analyze_one(item, idx)
+            except Exception as exc:
+                logging.exception("Failed to analyze secret #%s: %s", idx, exc)
+                continue
+            analyses.append(analysis)
+            llm_annotations.append(llm_info)
+
+        result_json = self._build_output(file_path, analyses)
+
+        if results_collector and hasattr(results_collector, "add_result"):
+            for analysis, llm_info in zip(analyses, llm_annotations):
+                metadata = {"source": str(file_path)}
+                if llm_info:
+                    metadata["llm"] = llm_info
+                results_collector.add_result("secret", analysis.to_dict(), metadata=metadata)
+
+        return result_json
+
+    def run_from_manifest_path(self, manifest_path: Path) -> Dict[str, Any]:
+        content = read_text(manifest_path)
+        return self.analyze(manifest_path, "json", content)
+
+    def _load_manifest(self, path: Path, content: Optional[str]) -> List[SecretInput]:
+        raw: Any = None
+        if content:
+            try:
+                raw = json.loads(content)
+            except Exception:
+                raw = None
+        if raw is None:
+            raw = json.loads(read_text(path))
+
+        if isinstance(raw, dict):
+            container = raw.get("secrets") or raw.get("entries") or raw.get("items") or []
+        elif isinstance(raw, list):
+            container = raw
+        else:
+            container = []
+
+        items: List[SecretInput] = []
+        for obj in container:
+            if not isinstance(obj, dict):
+                continue
+            file_value = obj.get("file") or obj.get("file_path") or obj.get("path") or obj.get("location")
+            secret_value = obj.get("value") or obj.get("secret") or obj.get("token")
+            hint = obj.get("hint") or obj.get("name") or obj.get("key") or obj.get("env")
+            line = obj.get("line") or obj.get("lineno")
+            if file_value and secret_value:
+                items.append(SecretInput(file=str(file_value), value=str(secret_value), hint=hint, line=line))
+        return items
+
+    def _analyze_one(self, item: SecretInput, idx: int) -> Tuple[SecretAnalysis, Optional[Dict[str, Any]]]:
+        source_path = Path(item.file)
+        if not str(source_path).startswith("s3://"):
+            source_path = source_path.expanduser().resolve()
+        text = ""
+        try:
+            if source_path.exists():
+                text = read_text(source_path)
+        except Exception:
+            text = ""
+
+        language = detect_language_from_ext(source_path if isinstance(source_path, Path) else Path(item.file))
+        occurrences = find_occurrences(text, item.value)
+        var_name = self._guess_var_name(item, text, occurrences)
+        snippet = self._make_context_window(text, occurrences, default_line=item.line)
+        entropy = shannon_entropy(item.value)
+
+        llm_details: Optional[Dict[str, Any]] = None
+        if self.use_llm:
+            try:
+                llm_client = self._ensure_ollama()
+                llm_details = llm_client.classify(item.value, language, snippet)
+            except Exception as exc:
+                logging.warning("LLM classification unavailable: %s", exc)
+                llm_details = None
+
+        analysis = SecretAnalysis(
+            id=f"secret-{idx + 1}",
+            source_file=str(source_path),
+            language=language,
+            secret_value=item.value,
+            secret_length=len(item.value),
+            secret_entropy=round(entropy, 3),
+            occurrences=[{"line": ln, "column": col} for (ln, col) in occurrences],
+            context_snippet=snippet,
+            var_name=var_name,
+        )
+        return analysis, llm_details
+
+    def _ensure_ollama(self) -> OllamaLLM:
+        if self._ollama_client is None:
+            self._ollama_client = OllamaLLM(model=self.model, host=self.ollama_host)
+        return self._ollama_client
+
+    @staticmethod
+    def _guess_var_name(item: SecretInput, text: str, occurrences: List[Tuple[int, int]]) -> Optional[str]:
+        if item.hint:
+            return str(item.hint)
+        if not text:
+            return None
+        lines = text.splitlines()
+        for line_no, _ in occurrences[:3]:
+            if 0 <= line_no - 1 < len(lines):
+                line = lines[line_no - 1]
+            else:
+                continue
+            match = re.search(r"([A-Z0-9_]{3,})\s*=\s*['\"].*?['\"]", line)
+            if match:
+                return match.group(1)
+            match = re.search(r"export\s+([A-Z0-9_]{3,})\s*=", line)
+            if match:
+                return match.group(1)
+        return None
+
+    @staticmethod
+    def _make_context_window(text: str, occurrences: List[Tuple[int, int]], default_line: Optional[int] = None, radius: int = 4) -> str:
+        lines = text.splitlines()
+        if occurrences:
+            center = occurrences[0][0]
+        elif default_line:
+            center = int(default_line)
+        else:
+            return ""
+        start = max(1, center - radius)
+        end = min(len(lines), center + radius)
+        snippet_lines = []
+        for line_no in range(start, end + 1):
+            snippet_lines.append(f"{line_no:>5}: {lines[line_no - 1]}")
+        return "\n".join(snippet_lines)
+
+    def _build_output(self, manifest_path: Path, analyses: List[SecretAnalysis]) -> Dict[str, Any]:
+        return {
+            "version": "1.0",
+            "plugin": self.name,
+            "generated_at": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+            "inputs": {"manifest_path": str(manifest_path)},
+            "results": [analysis.to_dict() for analysis in analyses],
+        }
+
+
+# Example usage:
+# plugin = SecretsContextPlugin()
+# report = plugin.run_from_manifest_path(Path("manifest.json"))
+# Path("secrets_report.json").write_text(json.dumps(report, indent=2))

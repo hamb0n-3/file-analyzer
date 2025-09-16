@@ -11,7 +11,7 @@ import hashlib
 import json
 import traceback
 from pathlib import Path
-from typing import Dict, Any, Optional, List, Set
+from typing import Dict, Any, Optional, List, Set, Tuple
 
 from .core.analyzer import FileAnalyzer
 from .utils.dependency_checker import check_dependencies, generate_requirements_file, setup_colored_output
@@ -102,6 +102,11 @@ def parse_arguments():
 
     # Subcommands
     subparsers = parser.add_subparsers(dest='command', metavar='command')
+
+    # ai subcommand
+    ai_p = subparsers.add_parser('ai', help='Enrich a secrets manifest with file context')
+    ai_p.add_argument('-i', '--input-file', required=True, help='Path to the secrets manifest JSON file')
+    ai_p.add_argument('-o', '--output-file', required=True, help='Path to write the enriched JSON report')
 
     # file subcommand
     file_p = subparsers.add_parser('file', help='Analyze one or more files')
@@ -616,6 +621,144 @@ def _format_plugin_text(plugin_name: str, results: Dict[str, Any], *,
     return "\n".join(lines).strip() + "\n"
 
 
+def _normalize_plugin_bucket(aggregated: Dict[str, Any]) -> Tuple[Dict[str, List[str]], Dict[str, List[Dict[str, Any]]], int]:
+    """Normalize an aggregated plugin payload into JSON-friendly primitives."""
+    categories: Dict[str, List[str]] = {}
+    entries: Dict[str, List[Dict[str, Any]]] = {}
+    seen: Set[str] = set()
+
+    raw_categories = aggregated.get('categories') or {}
+    for dtype, values in raw_categories.items():
+        if isinstance(values, (set, list, tuple)):
+            cleaned = sorted({str(v) for v in values})
+        else:
+            continue
+        categories[dtype] = cleaned
+        seen.update(cleaned)
+
+    raw_entries = aggregated.get('entries') or {}
+    for dtype, items in raw_entries.items():
+        if not items:
+            continue
+        cleaned_items: List[Dict[str, Any]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            cleaned_entry: Dict[str, Any] = {}
+            for key in ('value', 'file', 'line', 'username'):
+                if key in item and item[key] is not None:
+                    cleaned_entry[key] = item[key]
+            if cleaned_entry:
+                cleaned_items.append(cleaned_entry)
+                value = cleaned_entry.get('value')
+                if value is not None:
+                    seen.add(str(value))
+        if cleaned_items:
+            entries[dtype] = cleaned_items
+
+    total = len(seen)
+    return categories, entries, total
+
+
+def _format_aggregated_plugins_text(plugin_buckets: Optional[Dict[str, Any]], *,
+                                     generated_at: str,
+                                     selection: str) -> str:
+    """Build a human-readable report for all plugin buckets."""
+    title = "Aggregated Plugin Findings"
+    lines: List[str] = [title, "=" * len(title)]
+    lines.append(f"Generated: {generated_at}")
+    if selection:
+        lines.append(f"Plugin selection: {selection}")
+    lines.append("")
+
+    if not plugin_buckets:
+        lines.append("No plugin findings detected.")
+        return "\n".join(lines).strip() + "\n"
+
+    any_section = False
+    for plugin_name in sorted(plugin_buckets.keys()):
+        aggregated = plugin_buckets.get(plugin_name) or {}
+        categories, entries, total = _normalize_plugin_bucket(aggregated)
+        if not categories and not entries:
+            continue
+        any_section = True
+        lines.append(f"[{plugin_name}]")
+        lines.append(f"Total findings: {total}")
+        category_names = sorted(set(categories.keys()) | set(entries.keys()))
+        for category in category_names:
+            values = categories.get(category, [])
+            records = entries.get(category, [])
+            if not values and not records:
+                continue
+            lines.append(f"  {category}:")
+            used: Set[str] = set()
+            for record in records:
+                value = record.get('value')
+                if value is not None:
+                    used.add(str(value))
+                location = record.get('file') or 'unknown'
+                if record.get('line') is not None:
+                    location = f"{location}:{record['line']}"
+                detail_value = value if value is not None else '<value>'
+                detail = f"    - {detail_value} ({location})"
+                if record.get('username'):
+                    detail += f" [possible owner: {record['username']}]"
+                lines.append(detail)
+            for value in values:
+                if str(value) in used:
+                    continue
+                lines.append(f"    - {value}")
+            lines.append("")
+        lines.append("")
+
+    if not any_section:
+        lines.append("No plugin findings detected.")
+
+    return "\n".join(line.rstrip() for line in lines if line is not None).strip() + "\n"
+
+
+def _build_plugins_json_payload(plugin_buckets: Optional[Dict[str, Any]], *,
+                                 generated_at: str,
+                                 selection: str) -> Dict[str, Any]:
+    """Create a JSON-serializable payload for aggregated plugin results."""
+    payload: Dict[str, Any] = {
+        'generated_at': generated_at,
+        'plugin_selection': selection,
+        'plugins': {}
+    }
+
+    if not plugin_buckets:
+        payload['summary'] = {
+            'total_findings': 0,
+            'plugins_evaluated': 0,
+            'plugins_with_findings': 0,
+        }
+        return payload
+
+    total_findings = 0
+    plugins_with_findings = 0
+    for plugin_name in sorted(plugin_buckets.keys()):
+        aggregated = plugin_buckets.get(plugin_name) or {}
+        categories, entries, total = _normalize_plugin_bucket(aggregated)
+        if categories or entries:
+            plugins_with_findings += 1
+        plugin_payload: Dict[str, Any] = {
+            'total_findings': total,
+            'categories': categories,
+        }
+        if entries:
+            plugin_payload['entries'] = entries
+        payload['plugins'][plugin_name] = plugin_payload
+        total_findings += total
+
+    payload['summary'] = {
+        'total_findings': total_findings,
+        'plugins_evaluated': len(plugin_buckets),
+        'plugins_with_findings': plugins_with_findings,
+    }
+    return payload
+
+
 def _selected_plugins_label(args) -> str:
     plugins_value = getattr(args, 'plugins', None)
     if not plugins_value:
@@ -630,7 +773,7 @@ def _selected_plugins_label(args) -> str:
 def _secret_manifest_requested(args) -> bool:
     plugins_value = getattr(args, 'plugins', None)
     if not plugins_value:
-        return True
+        return False
     try:
         groups = {p.strip().lower() for p in str(plugins_value).split(',') if p and p.strip()}
     except Exception:
@@ -702,121 +845,117 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
     colors = setup_colored_output()
     selection_label = _selected_plugins_label(args)
     generated_at = generated_at or datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    plugin_buckets = plugin_buckets if plugin_buckets is not None else aggregate_results_by_plugin(all_results)
 
-    if args.output_dir:
-        output_dir = Path(args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-    else:
-        output_dir = None
+    out_dir = Path(getattr(args, 'output_dir', None) or Path.cwd())
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    is_dir_mode = getattr(args, 'command', None) == 'dir'
-    multi_file = len(all_results) > 1
+    command = getattr(args, 'command', None)
+    root_path: Optional[Path] = None
+    if command == 'dir':
+        root_arg = getattr(args, 'path', None) or getattr(args, 'dir', None)
+        if root_arg:
+            try:
+                root_path = Path(root_arg)
+            except Exception:
+                root_path = None
 
-    if is_dir_mode and multi_file:
+    summary_meta = {
+        'generated_at': generated_at,
+        'plugins': selection_label,
+        'scan_mode': command or 'file',
+    }
+    if command == 'dir':
+        summary_meta['root'] = str(root_path) if root_path else 'project'
+    elif command == 'file':
+        summary_meta['root'] = 'files'
+    elif command:
+        summary_meta['root'] = command
+
+    try:
+        summary_json_path = out_dir / 'summary.json'
+        export_dir_summary_json(all_results, str(summary_json_path), root=root_path)
+        logging.info(f"Wrote summary JSON: {summary_json_path}")
+    except Exception as exc:
+        logging.warning(f"Failed to write summary JSON: {exc}")
+
+    try:
+        summary_txt = format_dir_summary(all_results, root=root_path, colors=None, metadata=summary_meta)
+        summary_txt_path = out_dir / 'summary.txt'
+        _write_text_file(summary_txt_path, summary_txt)
+        logging.info(f"Wrote summary text: {summary_txt_path}")
+    except Exception as exc:
+        logging.warning(f"Failed to write summary text report: {exc}")
+
+    if getattr(args, 'html', False):
         try:
-            out_dir = output_dir or Path.cwd()
-            out_dir.mkdir(parents=True, exist_ok=True)
-            active_buckets = plugin_buckets if plugin_buckets is not None else aggregate_results_by_plugin(all_results)
-            if not active_buckets:
-                logging.info("No plugin-group findings to export.")
-            else:
-                def _suffix_path(base: Path, suffix: str) -> Path:
-                    if not suffix.startswith('.'):
-                        raise ValueError(f"Suffix must start with a dot: {suffix}")
-                    return base.with_suffix(suffix) if base.suffix else base.parent / f"{base.name}{suffix}"
+            summary_html_path = out_dir / 'summary.html'
+            create_dir_summary_html(all_results, str(summary_html_path), root=root_path, metadata=summary_meta)
+            logging.info(f"Wrote summary HTML: {summary_html_path}")
+        except Exception as exc:
+            logging.warning(f"Failed to write summary HTML report: {exc}")
 
-                for plugin_name, agg_results in active_buckets.items():
-                    base = out_dir / f"plugin-{plugin_name}"
-                    text_path = _suffix_path(base, '.txt')
-                    converted = aggregated_payload_to_results(agg_results)
-                    try:
-                        formatted_plugin = _format_plugin_text(
-                            plugin_name,
-                            converted,
-                            generated_at=generated_at,
-                            selection=selection_label,
-                        )
-                        _write_text_file(text_path, formatted_plugin)
-                        logging.info(f"Wrote plugin text report: {text_path}")
-                    except Exception as exc:
-                        logging.warning(f"Failed writing plugin text report {plugin_name}: {exc}")
-                    if args.json:
-                        export_results_json(converted, str(_suffix_path(base, '.json')))
-                    if args.html:
-                        create_html_report(converted, None, str(_suffix_path(base, '.html')))
-                    if args.csv:
-                        create_csv_report(converted, str(_suffix_path(base, '.csv')))
-                logging.info(
-                    f"Wrote plugin-aggregated reports: {', '.join(sorted(active_buckets.keys()))}"
-                )
-        except Exception as e:
-            logging.warning(f"Failed to write plugin-aggregated reports: {e}")
-    else:
-        for file_path_str, results in all_results.items():
-            file_path = Path(file_path_str)
+    try:
+        plugins_text = _format_aggregated_plugins_text(
+            plugin_buckets, generated_at=generated_at, selection=selection_label
+        )
+        plugins_txt_path = out_dir / 'plugins-output.txt'
+        _write_text_file(plugins_txt_path, plugins_text)
+        logging.info(f"Wrote aggregated plugin text: {plugins_txt_path}")
+    except Exception as exc:
+        logging.warning(f"Failed to write aggregated plugin text: {exc}")
 
-            if args.json:
-                json_path = generate_output_path(args, file_path, ".json")
-                export_results_json(results, json_path)
+    try:
+        plugins_payload = _build_plugins_json_payload(
+            plugin_buckets, generated_at=generated_at, selection=selection_label
+        )
+        plugins_json_path = out_dir / 'plugins-output.json'
+        _ensure_parent(plugins_json_path)
+        plugins_json_path.write_text(json.dumps(plugins_payload, indent=2), encoding='utf-8')
+        logging.info(f"Wrote aggregated plugin JSON: {plugins_json_path}")
+    except Exception as exc:
+        logging.warning(f"Failed to write aggregated plugin JSON: {exc}")
 
-            if args.html:
-                html_path = generate_output_path(args, file_path, ".html")
-                create_html_report(results, None, html_path)
+    for file_path_str, results in all_results.items():
+        file_path = Path(file_path_str)
 
-            if args.csv:
-                csv_path = generate_output_path(args, file_path, ".csv")
-                create_csv_report(results, csv_path)
+        if getattr(args, 'json', False):
+            json_path = generate_output_path(args, file_path, ".json")
+            export_results_json(results, json_path)
 
-            if output_dir:
-                text_ext = ".md" if args.md else ".txt"
-                text_path = generate_output_path(args, file_path, text_ext)
-                header_meta = {
-                    'generated_at': generated_at,
-                    'plugins': selection_label,
-                    'scan_mode': getattr(args, 'command', None) or 'file'
-                }
-                try:
-                    formatted = format_results(
-                        results,
-                        None,
-                        args.md,
-                        setup_colored_output(),
-                        file_path=str(file_path),
-                        header_metadata=header_meta,
-                    )
-                    import re as _re
-                    ansi = _re.compile(r"\x1b\[[0-9;]*m")
-                    formatted_plain = ansi.sub("", formatted)
-                    Path(text_path).write_text(formatted_plain, encoding='utf-8')
-                    logging.info(f"Wrote report: {text_path}")
-                except Exception as e:
-                    logging.warning(f"Failed to write text report for {file_path}: {e}")
+        if getattr(args, 'html', False):
+            html_path = generate_output_path(args, file_path, ".html")
+            create_html_report(results, None, html_path)
 
-    if is_dir_mode and multi_file:
-        try:
-            out_dir = output_dir or Path.cwd()
-            out_dir.mkdir(parents=True, exist_ok=True)
-            root_arg = getattr(args, 'path', None) or getattr(args, 'dir', None)
-            root_path = Path(root_arg) if root_arg else None
-            summary_meta = {
+        if getattr(args, 'csv', False):
+            csv_path = generate_output_path(args, file_path, ".csv")
+            create_csv_report(results, csv_path)
+
+        if getattr(args, 'output_dir', None):
+            text_ext = ".md" if args.md else ".txt"
+            text_path = generate_output_path(args, file_path, text_ext)
+            header_meta = {
                 'generated_at': generated_at,
                 'plugins': selection_label,
-                'root': str(root_path) if root_path else 'project',
+                'scan_mode': command or 'file'
             }
-
-            if args.json:
-                export_dir_summary_json(all_results, str(out_dir / 'summary.json'), root=root_path)
-            if args.html:
-                create_dir_summary_html(all_results, str(out_dir / 'summary.html'), root=root_path, metadata=summary_meta)
-
             try:
-                summary_txt = format_dir_summary(all_results, root=root_path, colors=None, metadata=summary_meta)
-                _write_text_file(out_dir / 'summary.txt', summary_txt)
-                logging.info("Wrote directory summary text: summary.txt")
+                formatted = format_results(
+                    results,
+                    None,
+                    args.md,
+                    colors,
+                    file_path=str(file_path),
+                    header_metadata=header_meta,
+                )
+                import re as _re
+                ansi = _re.compile(r"\[[0-9;]*m")
+                formatted_plain = ansi.sub("", formatted)
+                Path(text_path).write_text(formatted_plain, encoding='utf-8')
+                logging.info(f"Wrote report: {text_path}")
             except Exception as exc:
-                logging.warning(f"Failed to write summary text report: {exc}")
-        except Exception as e:
-            logging.warning(f"Failed to write directory summary artifacts: {e}")
+                logging.warning(f"Failed to write text report for {file_path}: {exc}")
+
 
 
 def main():
@@ -863,7 +1002,39 @@ def main():
     if getattr(args, 'plugins', None):
         enabled_plugins = args.plugins
     config['enabled_plugins'] = enabled_plugins
-    
+
+    # Handle AI enrichment mode before traditional analysis
+    if getattr(args, 'command', None) == 'ai':
+        from .ai_mode.ai_context_plugin import SecretsContextPlugin  # Local optional dependency
+
+        manifest_path = Path(args.input_file)
+        output_path = Path(args.output_file)
+
+        if not manifest_path.exists():
+            print(f"{colors['red']('Error: manifest not found')} -> {manifest_path}")
+            return 1
+
+        plugin = SecretsContextPlugin()
+        try:
+            report = plugin.run_from_manifest_path(manifest_path)
+        except Exception as exc:
+            logging.error("Failed to enrich secrets manifest: %s", exc)
+            print(f"{colors['red']('Error during enrichment:')} {exc}")
+            return 1
+
+        try:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(json.dumps(report, indent=2))
+        except Exception as exc:
+            logging.error("Failed to write enriched output: %s", exc)
+            print(f"{colors['red']('Error writing output:')} {exc}")
+            return 1
+
+        if not getattr(args, 'quiet', False):
+            print(f"{colors['green']('Enriched manifest written to')} {output_path}")
+
+        return 0
+
     # Determine mode and inputs
     files_to_analyze: List[Path] = []
     mode = None
@@ -895,10 +1066,7 @@ def main():
     generated_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     selection_label = _selected_plugins_label(args)
     secret_manifest_required = _secret_manifest_requested(args)
-    needs_plugin_buckets = secret_manifest_required or (
-        getattr(args, 'command', None) == 'dir' and len(all_results) > 1
-    )
-    plugin_buckets = aggregate_results_by_plugin(all_results) if needs_plugin_buckets else None
+    plugin_buckets = aggregate_results_by_plugin(all_results)
 
     if secret_manifest_required:
         _export_secrets_manifest(plugin_buckets, args, generated_at)
