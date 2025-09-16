@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-"""
-Secrets Context Plugin
-
-A drop-in, standalone plugin that:
-  • Reads a manifest JSON describing discovered secrets, each with file locations and the secret value.
-  • Opens the referenced files, finds the secret in-context, and extracts useful context (variable name, nearby lines, etc.).
-  • (Optionally) calls a local LLM through Ollama to classify each secret, but the classification metadata stays out of the exported JSON.
-  • Emits a final JSON in a stable, explicit format containing the original secret value and surrounding context.
-
-It is designed to work in two modes:
-  1) Standalone CLI (see run_secrets_plugin.py)
-  2) As a plugin class compatible with a typical AnalyzerPlugin interface (if present).
-
-Security notes:
-  • Secrets are processed and, when LLM classification is enabled, forwarded to Ollama exactly as provided.
-"""
 
 from __future__ import annotations
 
@@ -51,9 +35,9 @@ class OllamaLLM:
     """Minimal wrapper around the `ollama` Python client."""
 
     SYSTEM_PROMPT = (
-        "You are a security assistant. Given a raw secret value and a short context snippet, "
-        "classify the likely type and provider. Respond with strict JSON containing keys: "
-        "type, provider, confidence, severity, is_placeholder, usage, reasoning."
+        "You are a cybersecurity assistant. Given a raw value and a short context snippet, "
+        "classify whether it is significant to security, whether its a secret, key, token, cert, hash, password, or endpoint. Respond with strict JSON containing keys: "
+        "value, type, username (optional), usage, reasoning, file location."
     )
 
     def __init__(self, model: str = "qwen3-4b:latest", host: Optional[str] = None) -> None:
@@ -72,10 +56,10 @@ class OllamaLLM:
             {
                 "role": "user",
                 "content": (
-                    f"LANGUAGE: {language}\n"
+                    f"FILE TYPE: {language}\n"
                     f"SECRET: {raw_secret}\n"
                     f"CONTEXT:\n{context_snippet}\n"
-                    "Reply with JSON only."
+                    "Reply with JSON only using these keys {value, type, username (optional), usage, reasoning, file location}."
                 ),
             },
         ]
