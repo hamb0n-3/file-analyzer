@@ -3,6 +3,8 @@
 
 import re
 import logging
+import ipaddress
+from urllib.parse import urlparse
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, Match, Optional, Pattern, Set
@@ -191,11 +193,20 @@ class EndpointsAnalyzer(AnalyzerPlugin):
                 value = match.group(pattern.value_group)
             except IndexError:
                 value = match.group(0)
+            if pattern.result_key == 'ipv4' and self._skip_ipv4_candidate(value):
+                continue
+            if pattern.result_key == 'domain_keywords' and self._skip_domain_candidate(value):
+                continue
+            if pattern.result_key == 'url' and self._skip_url_candidate(value):
+                continue
             results.setdefault(pattern.result_key, set()).add(value)
         # MAC addresses
         mac_re = r'\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b'
         for m in re.finditer(mac_re, content):
-            results.setdefault('mac_address', set()).add(m.group(0))
+            mac = m.group(0)
+            if self._skip_mac_candidate(mac):
+                continue
+            results.setdefault('mac_address', set()).add(mac)
 
     def _analyze_network_protocols(self, content: str, results: Dict[str, Set[str]]) -> None:
         for protocol, pattern in self.network_patterns.get('protocols', {}).items():
@@ -261,6 +272,53 @@ class EndpointsAnalyzer(AnalyzerPlugin):
                     except re.error:
                         # Ignore malformed host/port patterns in regex context
                         pass
+
+    def _skip_ipv4_candidate(self, value: str) -> bool:
+        try:
+            ip = ipaddress.ip_address(value)
+        except ValueError:
+            return True
+        if not isinstance(ip, ipaddress.IPv4Address):
+            return True
+        return (
+            ip.is_loopback
+            or ip.is_multicast
+            or ip.is_unspecified
+            or ip.is_reserved
+            or getattr(ip, 'is_link_local', False)
+        )
+
+    def _skip_domain_candidate(self, domain: str) -> bool:
+        lowered = domain.lower()
+        noise_domains = {
+            'example.com', 'example.org', 'example.net', 'localhost', 'localdomain',
+            'test.com', 'test.org', 'test.net'
+        }
+        if lowered in noise_domains:
+            return True
+        if lowered.endswith('.example.com') or lowered.endswith('.example.org'):
+            return True
+        return False
+
+    def _skip_url_candidate(self, url_value: str) -> bool:
+        try:
+            parsed = urlparse(url_value)
+        except Exception:
+            return True
+        host = parsed.hostname or ""
+        if not host:
+            return True
+        if self._skip_domain_candidate(host):
+            return True
+        if parsed.scheme not in {'http', 'https'}:
+            return True
+        return False
+
+    def _skip_mac_candidate(self, mac: str) -> bool:
+        cleaned = mac.replace('-', ':').lower()
+        if cleaned == '00:00:00:00:00:00' or cleaned.startswith('ff:ff:ff'):
+            return True
+        return False
 
     def _get_port_service(self, port: int) -> str:
         common_ports = {

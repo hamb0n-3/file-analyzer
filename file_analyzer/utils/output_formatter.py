@@ -10,8 +10,10 @@ from pathlib import Path
 import re
 from collections import defaultdict
 
-def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] = None, 
-                   markdown_format: bool = False, colors: Optional[Dict] = None) -> str:
+def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] = None,
+                   markdown_format: bool = False, colors: Optional[Dict] = None, *,
+                   file_path: Optional[str] = None,
+                   header_metadata: Optional[Dict[str, Any]] = None) -> str:
     """
     Format analysis results for display.
     
@@ -34,10 +36,26 @@ def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] =
     if markdown_format:
         output.append("```")
 
-    # Add timestamp and header
-    current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    output.append(f"{colors['bold']('=== File Analysis Results ===')}")
-    output.append(f"{colors['blue']('Generated on:')} {current_time}\n")
+    # Header metadata block
+    generated_on = None
+    if header_metadata and header_metadata.get('generated_at'):
+        generated_on = str(header_metadata['generated_at'])
+    if not generated_on:
+        generated_on = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    output.append(colors['bold']('=== File Analysis Results ==='))
+    output.append(colors['cyan']('Run Details:'))
+    output.append(f"  {colors['blue']('Generated:')} {generated_on}")
+    if file_path:
+        output.append(f"  {colors['blue']('File:')} {file_path}")
+
+    if header_metadata:
+        for key, value in header_metadata.items():
+            if key == 'generated_at' or value is None:
+                continue
+            label = key.replace('_', ' ').title()
+            output.append(f"  {colors['green'](label)}: {value}")
+    output.append("")
     
     # Add file metadata if available
     if 'file_metadata' in results and results['file_metadata']:
@@ -222,11 +240,6 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
         # Common auth/key artifacts often found alongside API usage
         'jwt', 'access_token', 'refresh_token', 'oauth_token', 'api_token', 'auth_token', 'api_key',
     }
-    data_types = {
-        # Encoded/serialized and PII-esque items typically harvested from JSON/XML
-        'base64_encoded', 'hex_encoded', 'url_encoded', 'compressed_data', 'serialized_data',
-        'email', 'phone_number', 'personal_id', 'passport_number', 'xml_response'
-    }
     crypto_types = {
         'private_key', 'public_key', 'hash', 'encryption_key', 'certificate', 'signature'
     }
@@ -239,18 +252,20 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
         'username', 'password', 'jwt', 'access_token', 'refresh_token', 'oauth_token', 'api_token', 'auth_token',
         'api_key', 'aws_key', 'cloud_key', 'firebase_key', 'service_account', 'client_secret',
         'private_key', 'encryption_key', 'certificate', 'signature',
-        'credit_card', 'social_security', 'session_id', 'cookie', 'database_connection'
+        'credit_card', 'social_security', 'session_id', 'cookie', 'database_connection',
+        # Treat encoded or contact data as sensitive to avoid a dedicated 'data' bucket
+        'base64_encoded', 'hex_encoded', 'url_encoded', 'compressed_data', 'serialized_data',
+        'email', 'phone_number', 'personal_id', 'passport_number',
+        'high_entropy_strings'
     }
 
     groups: Dict[str, Dict[str, Any]] = {
         'code': {'categories': {}, 'entries': {}},
         'api': {'categories': {}, 'entries': {}},
         'endpoints': {'categories': {}, 'entries': {}},
-        'data': {'categories': {}, 'entries': {}},
         'crypto': {'categories': {}, 'entries': {}},
         'ml': {'categories': {}, 'entries': {}},
         'secret': {'categories': {}, 'entries': {}},
-        'other': {'categories': {}, 'entries': {}}
     }
 
     def bucket_for(dtype: str) -> str:
@@ -263,8 +278,6 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
             return 'api'
         if dtype in endpoints_types:
             return 'endpoints'
-        if dtype in data_types:
-            return 'data'
         if dtype in crypto_types:
             return 'crypto'
         if dtype in ml_types:
@@ -272,7 +285,9 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
         # exclude meta/runtime buckets from aggregation
         if dtype in {'file_metadata', 'runtime_errors'}:
             return ''
-        return 'other'
+        if dtype.startswith('_'):
+            return ''
+        return ''
 
     file_cache: Dict[str, Tuple[str, List[str]]] = {}
 
@@ -362,11 +377,13 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
                 continue
             bucket = groups[grp]
             cat_values = bucket.setdefault('categories', {}).setdefault(dtype, set())
-            cat_entries = bucket.setdefault('entries', {}).setdefault(dtype, [])
 
             for raw_value in values:
                 value = raw_value if isinstance(raw_value, str) else str(raw_value)
                 cat_values.add(value)
+                if grp != 'secret':
+                    continue
+                cat_entries = bucket.setdefault('entries', {}).setdefault(dtype, [])
                 meta_entry = None
                 if (dtype, raw_value) in meta_lookup and meta_lookup[(dtype, raw_value)]:
                     meta_entry = meta_lookup[(dtype, raw_value)].pop(0)
@@ -402,9 +419,12 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
     pruned: Dict[str, Dict[str, Any]] = {}
     for name, payload in groups.items():
         categories = {k: v for k, v in payload['categories'].items() if v}
-        entries = {k: v for k, v in payload['entries'].items() if v}
-        if categories or entries:
-            pruned[name] = {'categories': categories, 'entries': entries}
+        entries = {k: v for k, v in payload.get('entries', {}).items() if v}
+        if not categories and not entries:
+            continue
+        pruned[name] = {'categories': categories}
+        if entries:
+            pruned[name]['entries'] = entries
     return pruned
 
 
@@ -441,7 +461,7 @@ def aggregated_payload_to_results(aggregated: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 def format_dir_summary(all_results: Dict[str, Dict[str, Set[str]]], root: Optional[Path] = None,
-                       colors: Optional[Dict] = None) -> str:
+                       colors: Optional[Dict] = None, *, metadata: Optional[Dict[str, Any]] = None) -> str:
     """
     Format a directory-grouped summary for console output.
 
@@ -468,9 +488,25 @@ def format_dir_summary(all_results: Dict[str, Dict[str, Set[str]]], root: Option
     out_lines.append(colors['bold']('Directory Summary'))
     total_files = sum(len(files) for files in grouped.values())
     total_findings = sum(cnt for files in grouped.values() for _, cnt in files)
-    out_lines.append(
-        f"{colors['green']('Files (with findings):')} {total_files}  {colors['green']('Findings:')} {total_findings}\n"
-    )
+
+    info_lines = [
+        f"{colors['green']('Files (with findings):')} {total_files}",
+        f"{colors['green']('Findings:')} {total_findings}",
+    ]
+    if metadata:
+        generated = metadata.get('generated_at')
+        if generated:
+            info_lines.append(f"{colors['blue']('Generated:')} {generated}")
+        root_meta = metadata.get('root') or metadata.get('scan_root')
+        if root_meta:
+            info_lines.append(f"{colors['blue']('Scope:')} {root_meta}")
+        plugin_info = metadata.get('plugins') or metadata.get('plugin_selection')
+        if plugin_info:
+            info_lines.append(f"{colors['blue']('Plugins:')} {plugin_info}")
+        extra = metadata.get('notes')
+        if extra:
+            info_lines.append(f"{colors['blue']('Notes:')} {extra}")
+    out_lines.append("  ".join(info_lines) + "\n")
 
     if not grouped:
         out_lines.append(colors['yellow']('No files with findings detected.'))
@@ -488,7 +524,7 @@ def format_dir_summary(all_results: Dict[str, Dict[str, Set[str]]], root: Option
     return "\n".join(out_lines)
 
 def create_dir_summary_html(all_results: Dict[str, Dict[str, Set[str]]], output_file: str,
-                            root: Optional[Path] = None) -> None:
+                            root: Optional[Path] = None, metadata: Optional[Dict[str, Any]] = None) -> None:
     """Create an HTML directory summary grouped by folders and files."""
     # Group
     grouped: Dict[str, List[Tuple[str, int]]] = {}
@@ -506,10 +542,24 @@ def create_dir_summary_html(all_results: Dict[str, Dict[str, Set[str]]], output_
     html = [
         "<!DOCTYPE html>",
         "<html><head><meta charset='utf-8'><title>Directory Summary</title>",
-        "<style>body{font-family:Segoe UI,Arial,sans-serif;background:#f8f9fa;color:#333}.wrap{max-width:1100px;margin:0 auto;padding:20px}.card{background:#fff;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.1);padding:16px;margin-bottom:16px}.dir{font-weight:600;color:#007bff}.file{margin-left:12px}.meta{color:#555}</style>",
-        "</head><body><div class='wrap'>",
-        f"<div class='card'><h2>Directory Summary</h2><div class='meta'>Files with findings: {total_files} &nbsp; Findings: {total_findings}</div></div>"
+        "<style>body{font-family:Segoe UI,Arial,sans-serif;background:#f8f9fa;color:#333}.wrap{max-width:1100px;margin:0 auto;padding:20px}.card{background:#fff;border-radius:6px;box-shadow:0 1px 3px rgba(0,0,0,.1);padding:16px;margin-bottom:16px}.dir{font-weight:600;color:#007bff}.file{margin-left:12px}.meta{color:#555}.meta-grid{display:flex;flex-wrap:wrap;gap:12px;margin-top:8px}.meta-chip{background:#f1f3f5;border-radius:12px;padding:6px 12px;font-size:13px;color:#495057}</style>",
+        "</head><body><div class='wrap'>"
     ]
+
+    summary_meta = [f"Files with findings: {total_files}", f"Findings: {total_findings}"]
+    if metadata:
+        generated = metadata.get('generated_at')
+        if generated:
+            summary_meta.append(f"Generated: {generated}")
+        scope = metadata.get('root') or metadata.get('scan_root')
+        if scope:
+            summary_meta.append(f"Scope: {scope}")
+        plugins = metadata.get('plugins') or metadata.get('plugin_selection')
+        if plugins:
+            summary_meta.append(f"Plugins: {plugins}")
+
+    chips = "".join(f"<span class='meta-chip'>{item}</span>" for item in summary_meta)
+    html.append("<div class='card'><h2>Directory Summary</h2><div class='meta-grid'>" + chips + "</div></div>")
 
     if not grouped:
         html.append("<div class='card'><div class='meta'>No files with findings detected.</div></div>")

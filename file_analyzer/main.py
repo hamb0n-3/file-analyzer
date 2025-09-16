@@ -6,6 +6,9 @@ import os
 import argparse
 import logging
 import time
+import datetime
+import hashlib
+import json
 import traceback
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Set
@@ -495,7 +498,7 @@ def _plugin_group_mapping() -> Dict[str, set]:
             'base64_encoded', 'hex_encoded', 'url_encoded', 'serialized_data', 'compressed_data'
         },
         'xml': {'xml_response', 'soap_wsdl'},
-        'secret': secret_types,
+        'secret': secret_types | data_types | {'high_entropy_strings'},
     }
 
 
@@ -546,9 +549,18 @@ def _write_text_file(path: Path, content: str) -> None:
     path.write_text(content, encoding='utf-8')
 
 
-def _format_plugin_text(plugin_name: str, results: Dict[str, Any]) -> str:
+def _format_plugin_text(plugin_name: str, results: Dict[str, Any], *,
+                        generated_at: Optional[str] = None,
+                        selection: Optional[str] = None) -> str:
     header = f"Plugin: {plugin_name}"
-    lines = [header, "=" * len(header), ""]
+    timestamp = generated_at or datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    sub_header = [f"Generated: {timestamp}"]
+    if selection:
+        sub_header.append(f"Plugins: {selection}")
+    lines = [header, "=" * len(header)]
+    if sub_header:
+        lines.append(" | ".join(sub_header))
+    lines.append("")
     if not isinstance(results, dict):
         lines.append("No findings detected.")
         return "\n".join(lines).strip() + "\n"
@@ -561,6 +573,11 @@ def _format_plugin_text(plugin_name: str, results: Dict[str, Any]) -> str:
         for k, v in results.get('__meta__', {}).items()
         if isinstance(v, list)
     }
+    include_metadata = plugin_name == 'secret'
+
+    total_findings = sum(len(values) for values in categories_map.values())
+    lines.append(f"Total findings: {total_findings}")
+    lines.append("")
 
     has_values = False
     for category in sorted(categories_map.keys()):
@@ -571,23 +588,27 @@ def _format_plugin_text(plugin_name: str, results: Dict[str, Any]) -> str:
         has_values = True
         lines.append(f"[{category}]")
         used_values: Set[str] = set()
-        for entry in entries:
-            value = entry.get('value')
-            if not value:
-                continue
-            used_values.add(value)
-            location = entry.get('file') or "unknown"
-            if entry.get('line') is not None:
-                location = f"{location}:{entry['line']}"
-            lines.append(f"  - value: {value}")
-            lines.append(f"    location: {location}")
-            if entry.get('username'):
-                lines.append(f"    possible owner: {entry['username']}")
+        if include_metadata:
+            for entry in entries:
+                value = entry.get('value')
+                if not value:
+                    continue
+                used_values.add(value)
+                location = entry.get('file') or "unknown"
+                if entry.get('line') is not None:
+                    location = f"{location}:{entry['line']}"
+                lines.append(f"  - value: {value}")
+                lines.append(f"    location: {location}")
+                if entry.get('username'):
+                    lines.append(f"    possible owner: {entry['username']}")
         for value in values:
             if value in used_values:
                 continue
-            lines.append(f"  - value: {value}")
-            lines.append("    location: unknown")
+            if include_metadata:
+                lines.append(f"  - value: {value}")
+                lines.append("    location: unknown")
+            else:
+                lines.append(f"  - {value}")
         lines.append("")
 
     if not has_values:
@@ -595,43 +616,127 @@ def _format_plugin_text(plugin_name: str, results: Dict[str, Any]) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def export_all_results(all_results: Dict[str, Dict[str, set]], args):
-    """
-    Export results for all analyzed files based on command line arguments.
-    
-    Args:
-        all_results: Dictionary mapping file paths to their analysis results
-        args: Parsed command line arguments
-    """
+def _selected_plugins_label(args) -> str:
+    plugins_value = getattr(args, 'plugins', None)
+    if not plugins_value:
+        return 'all'
+    try:
+        cleaned = sorted({p.strip().lower() for p in str(plugins_value).split(',') if p and p.strip()})
+    except Exception:
+        return str(plugins_value)
+    return ','.join(cleaned) if cleaned else 'all'
+
+
+def _secret_manifest_requested(args) -> bool:
+    plugins_value = getattr(args, 'plugins', None)
+    if not plugins_value:
+        return True
+    try:
+        groups = {p.strip().lower() for p in str(plugins_value).split(',') if p and p.strip()}
+    except Exception:
+        return False
+    return 'secret' in groups or 'all' in groups
+
+
+def _collect_secret_entries(plugin_buckets: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    entries: List[Dict[str, Any]] = []
+    if not plugin_buckets:
+        return entries
+    secret_bucket = plugin_buckets.get('secret') or {}
+    raw_entries = secret_bucket.get('entries') or {}
+    seen: Set[str] = set()
+    for category, items in raw_entries.items():
+        if not items:
+            continue
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            value = item.get('value')
+            file_path = item.get('file')
+            if not value or not file_path:
+                continue
+            line = item.get('line')
+            username = item.get('username')
+            identity_source = f"{category}|{file_path}|{line or ''}|{value}"
+            digest = hashlib.sha256(identity_source.encode('utf-8', errors='ignore')).hexdigest()
+            if digest in seen:
+                continue
+            seen.add(digest)
+            record = {
+                'id': digest,
+                'file': file_path,
+                'value': value,
+                'category': category,
+            }
+            if line is not None:
+                record['line'] = line
+            if username:
+                record['username'] = username
+            entries.append(record)
+    return entries
+
+
+def _export_secrets_manifest(plugin_buckets: Optional[Dict[str, Any]], args, generated_at: str) -> None:
+    try:
+        entries = _collect_secret_entries(plugin_buckets)
+        manifest = {
+            'generated_at': generated_at,
+            'plugins': _selected_plugins_label(args),
+            'count': len(entries),
+            'secrets': entries,
+        }
+        out_dir = Path(getattr(args, 'output_dir', None) or Path.cwd())
+        out_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = out_dir / 'secrets.json'
+        manifest_path.write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+        logging.info(f"Wrote secrets manifest: {manifest_path}")
+    except Exception as exc:
+        logging.warning(f"Failed to write secrets manifest: {exc}")
+
+
+def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
+                       plugin_buckets: Optional[Dict[str, Any]] = None,
+                       generated_at: Optional[str] = None) -> None:
+    """Export results for all analyzed files based on command line arguments."""
+
     colors = setup_colored_output()
-    
-    # Create output directory if specified
+    selection_label = _selected_plugins_label(args)
+    generated_at = generated_at or datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     if args.output_dir:
         output_dir = Path(args.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-    
-    # If analyzing a directory, aggregate per-plugin rather than per-file
-    if getattr(args, 'command', None) == 'dir' and len(all_results) > 1:
-        try:
-            out_dir = Path(args.output_dir) if args.output_dir else Path.cwd()
-            out_dir.mkdir(parents=True, exist_ok=True)
+    else:
+        output_dir = None
 
-            plugin_buckets = aggregate_results_by_plugin(all_results)
-            if not plugin_buckets:
+    is_dir_mode = getattr(args, 'command', None) == 'dir'
+    multi_file = len(all_results) > 1
+
+    if is_dir_mode and multi_file:
+        try:
+            out_dir = output_dir or Path.cwd()
+            out_dir.mkdir(parents=True, exist_ok=True)
+            active_buckets = plugin_buckets if plugin_buckets is not None else aggregate_results_by_plugin(all_results)
+            if not active_buckets:
                 logging.info("No plugin-group findings to export.")
             else:
                 def _suffix_path(base: Path, suffix: str) -> Path:
-                    """Attach suffix to base path even when base has none."""
                     if not suffix.startswith('.'):
                         raise ValueError(f"Suffix must start with a dot: {suffix}")
                     return base.with_suffix(suffix) if base.suffix else base.parent / f"{base.name}{suffix}"
 
-                for plugin_name, agg_results in plugin_buckets.items():
+                for plugin_name, agg_results in active_buckets.items():
                     base = out_dir / f"plugin-{plugin_name}"
                     text_path = _suffix_path(base, '.txt')
                     converted = aggregated_payload_to_results(agg_results)
                     try:
-                        _write_text_file(text_path, _format_plugin_text(plugin_name, converted))
+                        formatted_plugin = _format_plugin_text(
+                            plugin_name,
+                            converted,
+                            generated_at=generated_at,
+                            selection=selection_label,
+                        )
+                        _write_text_file(text_path, formatted_plugin)
                         logging.info(f"Wrote plugin text report: {text_path}")
                     except Exception as exc:
                         logging.warning(f"Failed writing plugin text report {plugin_name}: {exc}")
@@ -642,16 +747,14 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args):
                     if args.csv:
                         create_csv_report(converted, str(_suffix_path(base, '.csv')))
                 logging.info(
-                    f"Wrote plugin-aggregated reports: {', '.join(sorted(plugin_buckets.keys()))}"
+                    f"Wrote plugin-aggregated reports: {', '.join(sorted(active_buckets.keys()))}"
                 )
         except Exception as e:
             logging.warning(f"Failed to write plugin-aggregated reports: {e}")
     else:
-        # Process each file's results (single-file mode or explicit file list)
         for file_path_str, results in all_results.items():
             file_path = Path(file_path_str)
 
-            # Generate output paths
             if args.json:
                 json_path = generate_output_path(args, file_path, ".json")
                 export_results_json(results, json_path)
@@ -664,13 +767,23 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args):
                 csv_path = generate_output_path(args, file_path, ".csv")
                 create_csv_report(results, csv_path)
 
-            # Always write a human-readable text or markdown report when output_dir is set
-            if args.output_dir:
+            if output_dir:
                 text_ext = ".md" if args.md else ".txt"
                 text_path = generate_output_path(args, file_path, text_ext)
+                header_meta = {
+                    'generated_at': generated_at,
+                    'plugins': selection_label,
+                    'scan_mode': getattr(args, 'command', None) or 'file'
+                }
                 try:
-                    formatted = format_results(results, None, args.md, setup_colored_output())
-                    # Strip color codes for file output
+                    formatted = format_results(
+                        results,
+                        None,
+                        args.md,
+                        setup_colored_output(),
+                        file_path=str(file_path),
+                        header_metadata=header_meta,
+                    )
                     import re as _re
                     ansi = _re.compile(r"\x1b\[[0-9;]*m")
                     formatted_plain = ansi.sub("", formatted)
@@ -678,22 +791,26 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args):
                     logging.info(f"Wrote report: {text_path}")
                 except Exception as e:
                     logging.warning(f"Failed to write text report for {file_path}: {e}")
-    
-    # If we have multiple files, create a directory summary report
-    if len(all_results) > 1 and getattr(args, 'command', None) == 'dir':
+
+    if is_dir_mode and multi_file:
         try:
-            out_dir = Path(args.output_dir) if args.output_dir else Path.cwd()
+            out_dir = output_dir or Path.cwd()
             out_dir.mkdir(parents=True, exist_ok=True)
             root_arg = getattr(args, 'path', None) or getattr(args, 'dir', None)
             root_path = Path(root_arg) if root_arg else None
+            summary_meta = {
+                'generated_at': generated_at,
+                'plugins': selection_label,
+                'root': str(root_path) if root_path else 'project',
+            }
 
             if args.json:
                 export_dir_summary_json(all_results, str(out_dir / 'summary.json'), root=root_path)
             if args.html:
-                create_dir_summary_html(all_results, str(out_dir / 'summary.html'), root=root_path)
+                create_dir_summary_html(all_results, str(out_dir / 'summary.html'), root=root_path, metadata=summary_meta)
 
             try:
-                summary_txt = format_dir_summary(all_results, root=root_path, colors=None)
+                summary_txt = format_dir_summary(all_results, root=root_path, colors=None, metadata=summary_meta)
                 _write_text_file(out_dir / 'summary.txt', summary_txt)
                 logging.info("Wrote directory summary text: summary.txt")
             except Exception as exc:
@@ -775,8 +892,24 @@ def main():
     # If plugin groups are specified (and not 'all'), filter the results to segregate analyses
     all_results = _filter_results_by_plugins(all_results, getattr(args, 'plugins', None))
 
+    generated_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    selection_label = _selected_plugins_label(args)
+    secret_manifest_required = _secret_manifest_requested(args)
+    needs_plugin_buckets = secret_manifest_required or (
+        getattr(args, 'command', None) == 'dir' and len(all_results) > 1
+    )
+    plugin_buckets = aggregate_results_by_plugin(all_results) if needs_plugin_buckets else None
+
+    if secret_manifest_required:
+        _export_secrets_manifest(plugin_buckets, args, generated_at)
+
     # Export results if requested
-    export_all_results(all_results, args)
+    export_all_results(
+        all_results,
+        args,
+        plugin_buckets=plugin_buckets,
+        generated_at=generated_at,
+    )
     
     # Print results to console if not suppressed
     if not args.quiet and not getattr(args, 'output_dir', None):
@@ -797,7 +930,12 @@ def main():
         # Directory-grouped summary for dir scans
         if getattr(args, 'command', None) == 'dir':
             root = Path(getattr(args, 'path', args.dir)) if getattr(args, 'path', None) or getattr(args, 'dir', None) else None
-            print("\n" + format_dir_summary(all_results, root=root, colors=colors))
+            dir_meta = {
+                'generated_at': generated_at,
+                'plugins': selection_label,
+                'root': str(root) if root else 'project'
+            }
+            print("\n" + format_dir_summary(all_results, root=root, colors=colors, metadata=dir_meta))
 
         # Print detailed results for each file
         if not args.summary_only:
@@ -807,7 +945,19 @@ def main():
                 print(f"{colors['bold']('='*80)}")
                 
                 # Format and print results
-                formatted_results = format_results(results, None, args.md, colors)
+                header_meta = {
+                    'generated_at': generated_at,
+                    'plugins': selection_label,
+                    'scan_mode': getattr(args, 'command', None) or 'file'
+                }
+                formatted_results = format_results(
+                    results,
+                    None,
+                    args.md,
+                    colors,
+                    file_path=file_path_str,
+                    header_metadata=header_meta,
+                )
                 print(formatted_results)
 
     

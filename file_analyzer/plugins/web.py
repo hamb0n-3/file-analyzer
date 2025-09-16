@@ -21,29 +21,28 @@ class WebAnalyzer(AnalyzerPlugin):
         self.api_patterns = {
             # Require an explicit scheme to avoid arbitrary path-like text
             'api_endpoint': r"(?i)https?://[^\s\"']+/(?:api(?:/|$)|rest(?:/|$)|graphql(?:/|$)|v\d+/(?:[^\s\"']+))[^\s\"']*",
-            'api_method': r"(?i)(?:'|\"|\b)(?:GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)(?:'|\"|\b)",
             'content_type': r"(?i)(?:Content-Type|content-type)[=:]\s*['\"]([^'\"]+)['\"]",
             'api_version': r"(?i)(?:v\d+(?:\.\d+)*|\bversion[=:]\s*['\"]([^'\"]+)['\"])",
             'api_parameter': r"(?i)(?:[?&][^=\s]+=[^&\s]+)",
-            'authorization_header': r"(?i)(?:Authorization|auth)[=:]\s*['\"]([^'\"]+)['\"]",
+            'authorization_header': r"(?i)(?:Authorization|X-Auth-Token|Auth-Token)[=:]\s*['\"]([^'\"]+)['\"]",
             'rate_limit': r"(?i)(?:rate[_-]?limit|x-rate-limit)[=:]\s*['\"]?(\d+)['\"]?",
-            'api_key_param': r"(?i)(?:\?|&)(?:api_key|apikey|key)=([A-Za-z0-9._-]{16,})",
+            'api_key_param': r"(?i)(?:\?|&)(?:api[_-]?key|apikey|access[_-]?token|auth[_-]?token)=([A-Za-z0-9._-]{16,})",
             'curl_command': r"(?i)curl\s+(?:-X\s+(?:GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\s+)?['\"]?https?://[^\s\'\">]+",
             'webhook_url': r"(?i)(?:webhook|callback)[=:]\s*['\"]?https?://[^\s'\"]+['\"]?",
             'http_status_code': r"(?i)(?:status|code)[=:]\s*['\"]?(\d{3})['\"]?",
             'openapi_schema': r"(?i)(?:\"openapi\"\s*:\s*\"\d+\.\d+\.\d+\"|\"swagger\"\s*:\s*\"\d+\.\d+\")",
             'graphql_query': r"(?i)(?:query\s+\w+\s*\{[^}]*\}|mutation\s+\w+\s*\{[^}]*\})",
             'graphql_schema': r"(?i)(?:type\s+\w+\s*\{[^}]*\}|input\s+\w+\s*\{[^}]*\}|interface\s+\w+\s*\{[^}]*\})",
-            'rest_resource': r"(?i)(?:\/[a-zA-Z0-9_-]+(?:\/\{[a-zA-Z0-9_-]+\})?(?:\/[a-zA-Z0-9_-]+)*)",
+            'rest_resource': r"(?i)(?:\/(?:[a-zA-Z0-9_-]+\/)+[a-zA-Z0-9_-]+)",
             'xml_response': r"(?i)(?:<\?xml[^>]+>|<[a-zA-Z0-9_:]+\s+xmlns)",
             'error_pattern': r"(?i)(?:\"error\"\s*:\s*\{|\"errors\"\s*:\s*\[|\<error>|\<errors>)",
             'http_error': r"(?i)(?:[45]\d{2}\s+[A-Za-z\s]+)",
             'oauth_flow': r"(?i)(?:oauth2|authorization_code|client_credentials|password|implicit)",
             'api_auth_scheme': r"(?i)(?:bearer|basic|digest|apikey|oauth|jwt)\s+auth",
-            'request_header': r"(?i)(?:[A-Za-z0-9-]+:\s*[^\n]+)",
+            'request_header': r"(?mi)^[A-Za-z][A-Za-z0-9-]{1,30}:\s*[^\s][^\r\n]*$",
             'request_body_json': r"(?i)(?:body\s*:\s*\{[^}]*\}|data\s*:\s*\{[^}]*\})",
             'form_data': r"(?i)(?:FormData|multipart\/form-data|application\/x-www-form-urlencoded)",
-            'path_parameter': r"(?i)(?:\{[a-zA-Z0-9_-]+\})",
+            'path_parameter': r"(?i)/(?:\{[a-zA-Z0-9_-]+\})",
             'query_parameter': r"(?i)(?:\?(?:[a-zA-Z0-9_-]+=[^&\s]+)(?:&[a-zA-Z0-9_-]+=[^&\s]+)*)",
             'api_doc_comment': r"(?i)(?:\/\*\*[\s\S]*?\*\/|\/\/\/.*$|#\s+@api)",
             'webhook_event': r"(?i)(?:\"event\"\s*:\s*\"[^\"]+\"|event=[^&\s]+)",
@@ -78,6 +77,7 @@ class WebAnalyzer(AnalyzerPlugin):
         self.extract_api_responses(content, results)
         self.extract_complete_api_requests(content, results)
         # Additional header/param detections
+        self._scan_api_methods(content, results)
         self._scan_simple_patterns(content, results)
         # Session and cookie patterns (migrated from data_patterns)
         self._scan_session_cookie(content, results)
@@ -244,7 +244,23 @@ class WebAnalyzer(AnalyzerPlugin):
             if not pat:
                 continue
             for m in re.finditer(pat, content):
+                if key == 'request_header' and self._line_is_comment(content, m.start()):
+                    continue
                 val = m.group(0)
+                if key in {'api_parameter', 'query_parameter'}:
+                    window = content[max(0, m.start() - 80):m.start()].lower()
+                    if all(token not in window for token in ('http', 'fetch', 'axios', 'request', 'client', 'curl', 'api', '://')):
+                        continue
+                if key == 'path_parameter':
+                    if m.start() == 0:
+                        continue
+                    if content[m.start()] != '/':
+                        continue
+                if key == 'request_header':
+                    val = val.strip()
+                if key == 'api_key_param':
+                    if 'apikey' not in val.lower() and 'api_key' not in val.lower() and 'token=' not in val.lower():
+                        continue
                 results.setdefault(key, set()).add(val)
 
     def _scan_session_cookie(self, content: str, results: Dict[str, Set[str]]) -> None:
@@ -256,3 +272,29 @@ class WebAnalyzer(AnalyzerPlugin):
             for m in re.finditer(pat, content):
                 val = m.group(1) if m.lastindex else m.group(0)
                 results.setdefault(key, set()).add(val)
+
+    def _scan_api_methods(self, content: str, results: Dict[str, Set[str]]) -> None:
+        method_regexes = [
+            re.compile(r'(?i)requests\.(?P<method>get|post|put|delete|patch|options|head)\s*\('),
+            re.compile(r'(?i)axios\.(?P<method>get|post|put|delete|patch|options|head)\s*\('),
+            re.compile(r'(?i)curl\s+-X\s+(?P<method>GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\b'),
+            re.compile(r'(?mi)^\s*(?P<method>GET|POST|PUT|DELETE|PATCH|OPTIONS|HEAD)\s+https?://')
+        ]
+        for regex in method_regexes:
+            for match in regex.finditer(content):
+                method = match.group('method')
+                if not method:
+                    continue
+                if self._line_is_comment(content, match.start()):
+                    continue
+                results.setdefault('api_method', set()).add(method.upper())
+
+    def _line_is_comment(self, content: str, index: int) -> bool:
+        line_start = content.rfind('\n', 0, index) + 1
+        line_end = content.find('\n', line_start)
+        if line_end == -1:
+            line_end = len(content)
+        line = content[line_start:line_end].strip()
+        if not line:
+            return False
+        return line.startswith('//') or line.startswith('#') or line.startswith('<!--')

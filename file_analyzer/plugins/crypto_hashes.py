@@ -57,6 +57,8 @@ class CryptoHashesAnalyzer(AnalyzerPlugin):
             raw = m.group(0)
             htype = self._identify_hash(raw)
             ent = calculate_entropy(raw)
+            if not raw.startswith('$2') and ent < 3.5:
+                continue
             annotated = f"{raw} (Type: {htype}, Entropy: {ent:.2f})"
             results.setdefault('hash', set()).add(annotated)
         return results
@@ -84,4 +86,3 @@ class CryptoHashesAnalyzer(AnalyzerPlugin):
                 elif entropy < 2.5:
                     potential.append('NTLM')
         return '/'.join(potential) if potential else 'Unknown'
-

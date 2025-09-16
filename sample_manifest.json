@@ -1,0 +1,10 @@
+{
+  "secrets": [
+    {
+      "file": "/etc/hosts",
+      "value": "127.0.0.1",
+      "hint": "LOCALHOST_IP",
+      "line": 1
+    }
+  ]
+}
