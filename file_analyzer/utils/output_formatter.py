@@ -265,13 +265,13 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
         'endpoints': {'categories': {}, 'entries': {}},
         'crypto': {'categories': {}, 'entries': {}},
         'ml': {'categories': {}, 'entries': {}},
-        'secret': {'categories': {}, 'entries': {}},
+        'secrets': {'categories': {}, 'entries': {}},
     }
 
     def bucket_for(dtype: str) -> str:
-        # Give precedence to 'secret' so those items are not duplicated
+        # Give precedence to 'secrets' so those items are not duplicated
         if dtype in secret_types:
-            return 'secret'
+            return 'secrets'
         if dtype in code_types:
             return 'code'
         if dtype in api_types:
@@ -381,7 +381,7 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
             for raw_value in values:
                 value = raw_value if isinstance(raw_value, str) else str(raw_value)
                 cat_values.add(value)
-                if grp != 'secret':
+                if grp != 'secrets':
                     continue
                 cat_entries = bucket.setdefault('entries', {}).setdefault(dtype, [])
                 meta_entry = None

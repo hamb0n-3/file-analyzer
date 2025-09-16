@@ -62,15 +62,15 @@ def parse_arguments():
     file-analyzer dir -r ./project_folder
 
   {colors['cyan']('Enable specific plugins:')}
-    file-analyzer file ./example.js --plugins code,api
-    file-analyzer dir ./project --plugins endpoints,secret
-    file-analyzer dir ./project --plugins crypto,json,xml
-    file-analyzer dir ./project --plugins all
+    file-analyzer file ./example.js --plugin code,api
+    file-analyzer dir ./project --plugin endpoints,secrets
+    file-analyzer dir ./project --plugin crypto,json,xml
+    file-analyzer dir ./project --plugin all
 
   {colors['cyan']('Available plugin groups:')}
-    code, api (alias: web), endpoints (alias: network), json, xml, secret, crypto, ml, all
+    code, api (alias: web), endpoints (alias: network), json, xml, secrets, crypto, ml, all
 
-  {colors['yellow']('Note:')} JSON and XML parsers run as core helpers regardless of --plugins.
+  {colors['yellow']('Note:')} JSON and XML parsers run as core helpers regardless of --plugin.
     They parse structure and expose minimal metadata to assist analysis.
 
   {colors['cyan']('Export to different formats:')}
@@ -111,7 +111,7 @@ def parse_arguments():
     # file subcommand
     file_p = subparsers.add_parser('file', help='Analyze one or more files')
     file_p.add_argument('paths', nargs='+', help='Path(s) to file(s) to analyze')
-    file_p.add_argument('--plugins', help='Comma-separated plugin groups: code, api(web), endpoints(network), json, xml, secret, crypto, ml, all')
+    file_p.add_argument('--plugin', dest='plugin', help='Comma-separated plugin groups: code, api(web), endpoints(network), json, xml, secrets, crypto, ml, all')
     file_p.add_argument('--md', action='store_true', help='Output in markdown format (wrapped in triple backticks)')
     file_p.add_argument('--json', action='store_true', help='Also export results to JSON files')
     file_p.add_argument('--html', action='store_true', help='Also export results to HTML reports')
@@ -124,7 +124,7 @@ def parse_arguments():
     dir_p = subparsers.add_parser('dir', help='Analyze files in a directory (use -r to recurse)')
     dir_p.add_argument('path', help='Directory to analyze')
     dir_p.add_argument('-r', '--recursive', action='store_true', help='Recurse into subdirectories')
-    dir_p.add_argument('--plugins', help='Comma-separated plugin groups: code, api(web), endpoints(network), json, xml, secret, crypto, ml, all')
+    dir_p.add_argument('--plugin', dest='plugin', help='Comma-separated plugin groups: code, api(web), endpoints(network), json, xml, secrets, crypto, ml, all')
     dir_p.add_argument('--exclude', action='append', help='Exclude file pattern (glob syntax, can be used multiple times)')
     dir_p.add_argument('--include', action='append', help='Include only file pattern (glob syntax, can be used multiple times)')
     dir_p.add_argument('--max-size', type=int, default=100, help='Maximum file size to analyze in MB (default: 100)')
@@ -503,20 +503,20 @@ def _plugin_group_mapping() -> Dict[str, set]:
             'base64_encoded', 'hex_encoded', 'url_encoded', 'serialized_data', 'compressed_data'
         },
         'xml': {'xml_response', 'soap_wsdl'},
-        'secret': secret_types | data_types | {'high_entropy_strings'},
+        'secrets': secret_types | data_types | {'high_entropy_strings'},
     }
 
 
-def _filter_results_by_plugins(all_results: Dict[str, Dict[str, set]], plugins_value: Optional[str]) -> Dict[str, Dict[str, set]]:
+def _filter_results_by_plugins(all_results: Dict[str, Dict[str, set]], plugin_value: Optional[str]) -> Dict[str, Dict[str, set]]:
     """Filter results to only those belonging to the selected plugin groups.
 
     Keeps 'file_metadata' and 'runtime_errors'. If plugins_value is None or contains 'all',
     no filtering is applied.
     """
-    if not plugins_value:
+    if not plugin_value:
         return all_results
     try:
-        req = {p.strip().lower() for p in str(plugins_value).split(',') if p and p.strip()}
+        req = {p.strip().lower() for p in str(plugin_value).split(',') if p and p.strip()}
     except Exception:
         req = set()
     if not req or 'all' in req:
@@ -578,7 +578,7 @@ def _format_plugin_text(plugin_name: str, results: Dict[str, Any], *,
         for k, v in results.get('__meta__', {}).items()
         if isinstance(v, list)
     }
-    include_metadata = plugin_name == 'secret'
+    include_metadata = plugin_name == 'secrets'
 
     total_findings = sum(len(values) for values in categories_map.values())
     lines.append(f"Total findings: {total_findings}")
@@ -760,7 +760,7 @@ def _build_plugins_json_payload(plugin_buckets: Optional[Dict[str, Any]], *,
 
 
 def _selected_plugins_label(args) -> str:
-    plugins_value = getattr(args, 'plugins', None)
+    plugins_value = getattr(args, 'plugin', None)
     if not plugins_value:
         return 'all'
     try:
@@ -771,21 +771,21 @@ def _selected_plugins_label(args) -> str:
 
 
 def _secret_manifest_requested(args) -> bool:
-    plugins_value = getattr(args, 'plugins', None)
+    plugins_value = getattr(args, 'plugin', None)
     if not plugins_value:
         return False
     try:
         groups = {p.strip().lower() for p in str(plugins_value).split(',') if p and p.strip()}
     except Exception:
         return False
-    return 'secret' in groups or 'all' in groups
+    return 'secrets' in groups or 'all' in groups
 
 
 def _collect_secret_entries(plugin_buckets: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
     entries: List[Dict[str, Any]] = []
     if not plugin_buckets:
         return entries
-    secret_bucket = plugin_buckets.get('secret') or {}
+    secret_bucket = plugin_buckets.get('secrets') or {}
     raw_entries = secret_bucket.get('entries') or {}
     seen: Set[str] = set()
     for category, items in raw_entries.items():
@@ -850,6 +850,9 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
     out_dir = Path(getattr(args, 'output_dir', None) or Path.cwd())
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    command = getattr(args, 'command', None)
+    dir_scan = command == 'dir' or (command is None and getattr(args, 'dir', None))
+
     base64_records: List[Dict[str, Any]] = []
     base64_seen: Set[Tuple[str, Optional[int], str]] = set()
     for file_path_str, res in all_results.items():
@@ -871,9 +874,8 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
             base64_seen.add(key)
             base64_records.append(record)
 
-    command = getattr(args, 'command', None)
     root_path: Optional[Path] = None
-    if command == 'dir':
+    if dir_scan:
         root_arg = getattr(args, 'path', None) or getattr(args, 'dir', None)
         if root_arg:
             try:
@@ -884,9 +886,9 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
     summary_meta = {
         'generated_at': generated_at,
         'plugins': selection_label,
-        'scan_mode': command or 'file',
+        'scan_mode': 'dir' if dir_scan else (command or 'file'),
     }
-    if command == 'dir':
+    if dir_scan:
         summary_meta['root'] = str(root_path) if root_path else 'project'
     elif command == 'file':
         summary_meta['root'] = 'files'
@@ -900,25 +902,26 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
     except Exception as exc:
         logging.warning(f"Failed to write summary JSON: {exc}")
 
-    try:
-        if base64_records:
-            base64_records.sort(key=lambda item: (
-                item.get('file', ''),
-                item.get('line', -1) if isinstance(item.get('line'), int) else -1,
-                item.get('original_base64', '')
-            ))
-            base64_payload = {
-                'generated_at': generated_at,
-                'plugins': selection_label,
-                'count': len(base64_records),
-                'blobs': base64_records,
-            }
-            base64_path = out_dir / 'base64blobs.json'
-            _ensure_parent(base64_path)
-            base64_path.write_text(json.dumps(base64_payload, indent=2, ensure_ascii=False), encoding='utf-8')
-            logging.info(f"Wrote base64 blob output: {base64_path}")
-    except Exception as exc:
-        logging.warning(f"Failed to write base64 blob output: {exc}")
+    if not dir_scan:
+        try:
+            if base64_records:
+                base64_records.sort(key=lambda item: (
+                    item.get('file', ''),
+                    item.get('line', -1) if isinstance(item.get('line'), int) else -1,
+                    item.get('original_base64', '')
+                ))
+                base64_payload = {
+                    'generated_at': generated_at,
+                    'plugins': selection_label,
+                    'count': len(base64_records),
+                    'blobs': base64_records,
+                }
+                base64_path = out_dir / 'base64blobs.json'
+                _ensure_parent(base64_path)
+                base64_path.write_text(json.dumps(base64_payload, indent=2, ensure_ascii=False), encoding='utf-8')
+                logging.info(f"Wrote base64 blob output: {base64_path}")
+        except Exception as exc:
+            logging.warning(f"Failed to write base64 blob output: {exc}")
 
     try:
         summary_txt = format_dir_summary(all_results, root=root_path, colors=None, metadata=summary_meta)
@@ -928,7 +931,7 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
     except Exception as exc:
         logging.warning(f"Failed to write summary text report: {exc}")
 
-    if getattr(args, 'html', False):
+    if getattr(args, 'html', False) and not dir_scan:
         try:
             summary_html_path = out_dir / 'summary.html'
             create_dir_summary_html(all_results, str(summary_html_path), root=root_path, metadata=summary_meta)
@@ -936,15 +939,16 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
         except Exception as exc:
             logging.warning(f"Failed to write summary HTML report: {exc}")
 
-    try:
-        plugins_text = _format_aggregated_plugins_text(
-            plugin_buckets, generated_at=generated_at, selection=selection_label
-        )
-        plugins_txt_path = out_dir / 'plugins-output.txt'
-        _write_text_file(plugins_txt_path, plugins_text)
-        logging.info(f"Wrote aggregated plugin text: {plugins_txt_path}")
-    except Exception as exc:
-        logging.warning(f"Failed to write aggregated plugin text: {exc}")
+    if not dir_scan:
+        try:
+            plugins_text = _format_aggregated_plugins_text(
+                plugin_buckets, generated_at=generated_at, selection=selection_label
+            )
+            plugins_txt_path = out_dir / 'plugins-output.txt'
+            _write_text_file(plugins_txt_path, plugins_text)
+            logging.info(f"Wrote aggregated plugin text: {plugins_txt_path}")
+        except Exception as exc:
+            logging.warning(f"Failed to write aggregated plugin text: {exc}")
 
     try:
         plugins_payload = _build_plugins_json_payload(
@@ -961,45 +965,47 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
         if isinstance(res, dict) and '__base64__' in res:
             res.pop('__base64__', None)
 
-    for file_path_str, results in all_results.items():
-        file_path = Path(file_path_str)
+    if not dir_scan:
+        for file_path_str, results in all_results.items():
+            file_path = Path(file_path_str)
 
-        if getattr(args, 'json', False):
-            json_path = generate_output_path(args, file_path, ".json")
-            export_results_json(results, json_path)
+            if getattr(args, 'json', False):
+                json_path = generate_output_path(args, file_path, ".json")
+                export_results_json(results, json_path)
 
-        if getattr(args, 'html', False):
-            html_path = generate_output_path(args, file_path, ".html")
-            create_html_report(results, None, html_path)
+            if getattr(args, 'html', False):
+                html_path = generate_output_path(args, file_path, ".html")
+                create_html_report(results, None, html_path)
 
-        if getattr(args, 'csv', False):
-            csv_path = generate_output_path(args, file_path, ".csv")
-            create_csv_report(results, csv_path)
+            if getattr(args, 'csv', False):
+                csv_path = generate_output_path(args, file_path, ".csv")
+                create_csv_report(results, csv_path)
 
-        if getattr(args, 'output_dir', None):
-            text_ext = ".md" if args.md else ".txt"
-            text_path = generate_output_path(args, file_path, text_ext)
-            header_meta = {
-                'generated_at': generated_at,
-                'plugins': selection_label,
-                'scan_mode': command or 'file'
-            }
-            try:
-                formatted = format_results(
-                    results,
-                    None,
-                    args.md,
-                    colors,
-                    file_path=str(file_path),
-                    header_metadata=header_meta,
-                )
-                import re as _re
-                ansi = _re.compile(r"\[[0-9;]*m")
-                formatted_plain = ansi.sub("", formatted)
-                Path(text_path).write_text(formatted_plain, encoding='utf-8')
-                logging.info(f"Wrote report: {text_path}")
-            except Exception as exc:
-                logging.warning(f"Failed to write text report for {file_path}: {exc}")
+            if getattr(args, 'output_dir', None):
+                text_ext = ".md" if args.md else ".txt"
+                text_path = generate_output_path(args, file_path, text_ext)
+                header_meta = {
+                    'generated_at': generated_at,
+                    'plugins': selection_label,
+                    'scan_mode': command or 'file'
+                }
+                try:
+                    formatted = format_results(
+                        results,
+                        None,
+                        args.md,
+                        colors,
+                        file_path=str(file_path),
+                        header_metadata=header_meta,
+                    )
+                    import re as _re
+                    ansi = _re.compile(r"\u001b\[[0-9;]*m")
+                    formatted_plain = ansi.sub("", formatted)
+                    Path(text_path).write_text(formatted_plain, encoding='utf-8')
+                    logging.info(f"Wrote report: {text_path}")
+                except Exception as exc:
+                    logging.warning(f"Failed to write text report for {file_path}: {exc}")
+
 
 
 
@@ -1044,8 +1050,8 @@ def main():
         config['memory_limit'] = args.memory_limit * 1024 * 1024  # Convert MB to bytes
     # Plugin selection via subcommand option or legacy (None -> enable all)
     enabled_plugins = None
-    if getattr(args, 'plugins', None):
-        enabled_plugins = args.plugins
+    if getattr(args, 'plugin', None):
+        enabled_plugins = args.plugin
     config['enabled_plugins'] = enabled_plugins
 
     # Handle AI enrichment mode before traditional analysis
@@ -1106,7 +1112,7 @@ def main():
     all_results = analyze_files(files_to_analyze, config, args)
 
     # If plugin groups are specified (and not 'all'), filter the results to segregate analyses
-    all_results = _filter_results_by_plugins(all_results, getattr(args, 'plugins', None))
+    all_results = _filter_results_by_plugins(all_results, getattr(args, 'plugin', None))
 
     generated_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     selection_label = _selected_plugins_label(args)
