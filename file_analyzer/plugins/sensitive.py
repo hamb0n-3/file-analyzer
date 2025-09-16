@@ -193,14 +193,19 @@ class SensitiveAnalyzer(AnalyzerPlugin):
             'username': r"(?i)\b(?:username|user|login)\b\s*[:=]\s*['\"]((?!example|sample|test|dummy|admin)['\"\w.@+-]{4,})['\"]",
             'api_key': r"""(?ix)
                 (?:\b(?:api[_-]?key|apikey|apiKey|client[_-]?secret|secret[_-]?key|access[_-]?key)\b)
-                \s*[:=]\s*
-                ['\"]
+                (?:\s*[:=]\s*|\s+)
+                (?:['\"])?
                 (?!changeme|example|sample|test|dummy|password|secret|redacted|none|null|false|true)
                 (?=
                     (?=.*?[A-Za-z])(?=.*?\d)
                 )
-                ([A-Za-z0-9_\-]{20,}|sk-[A-Za-z0-9]{20,}|AKIA[A-Z0-9]{16,})
-                ['\"]
+                (
+                    sk-[A-Za-z0-9]{32,}
+                    |sk-proj-[A-Za-z0-9]{40,}
+                    |AKIA[0-9A-Z]{16}
+                    |[A-Za-z0-9_\-]{28,}
+                )
+                (?:['\"])?
             """,
             'base64_encoded': r"(?<![A-Za-z0-9+/=])(?:[A-Za-z0-9+/]{4}){10,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?(?![A-Za-z0-9+/=])",
             'credit_card': r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b",

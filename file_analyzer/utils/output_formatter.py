@@ -95,6 +95,13 @@ def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] =
     
     output.append(f"{colors['green']('Total Findings:')} {total_findings}")
     
+    metadata_lookup: Dict[str, List[Dict[str, Any]]] = {}
+    if '__meta__' in results and isinstance(results['__meta__'], dict):
+        metadata_lookup = {
+            k: [dict(entry) for entry in v if isinstance(entry, dict)]
+            for k, v in results['__meta__'].items() if isinstance(v, list)
+        }
+
     # Add findings by category
     for category, data_types in categories.items():
         category_output = []
@@ -109,19 +116,6 @@ def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] =
             continue
             
         category_output.append(f"\n{colors['cyan'](category)} ({category_findings} findings):")
-        
-    metadata_lookup: Dict[str, List[Dict[str, Any]]] = {}
-    if '__meta__' in results and isinstance(results['__meta__'], dict):
-        metadata_lookup = {k: list(v) for k, v in results['__meta__'].items() if isinstance(v, list)}
-
-    def _consume_metadata(dtype: str, value: str) -> Optional[Dict[str, Any]]:
-        entries = metadata_lookup.get(dtype)
-        if not entries:
-            return None
-        for idx, entry in enumerate(entries):
-            if entry.get('value') == value:
-                return entries.pop(idx)
-        return None
 
         for data_type in data_types:
             if data_type in results and results[data_type]:
@@ -133,12 +127,23 @@ def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] =
 
                 for value in sorted_values:
                     display = value
-                    meta_entry = _consume_metadata(data_type, value)
+                    meta_entry: Optional[Dict[str, Any]] = None
+                    entries = metadata_lookup.get(data_type)
+                    if entries:
+                        for idx, entry in enumerate(entries):
+                            if entry.get('value') == value:
+                                meta_entry = entries.pop(idx)
+                                break
                     meta_parts: List[str] = []
                     if meta_entry:
-                        if 'line' in meta_entry:
+                        if meta_entry.get('file'):
+                            location = meta_entry['file']
+                            if meta_entry.get('line') is not None:
+                                location = f"{location}:{meta_entry['line']}"
+                            meta_parts.append(location)
+                        elif meta_entry.get('line') is not None:
                             meta_parts.append(f"line {meta_entry['line']}")
-                        if 'username' in meta_entry:
+                        if meta_entry.get('username'):
                             meta_parts.append(f"user {meta_entry['username']}")
                     if meta_parts:
                         display = f"{value} ({', '.join(meta_parts)})"
@@ -401,6 +406,39 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
         if categories or entries:
             pruned[name] = {'categories': categories, 'entries': entries}
     return pruned
+
+
+def aggregated_payload_to_results(aggregated: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert an aggregated plugin payload back into a standard results dict."""
+    result: Dict[str, Any] = {}
+
+    for dtype, values in (aggregated.get('categories') or {}).items():
+        if isinstance(values, set):
+            result[dtype] = set(values)
+        elif isinstance(values, list):
+            result[dtype] = set(values)
+        else:
+            continue
+
+    entries = aggregated.get('entries') or {}
+    meta: Dict[str, List[Dict[str, Any]]] = {}
+    for dtype, items in entries.items():
+        if not items:
+            continue
+        used: List[Dict[str, Any]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            entry = {k: item[k] for k in item.keys() if k in {'value', 'file', 'line', 'username'} and item.get(k) is not None}
+            if entry:
+                used.append(entry)
+        if used:
+            meta[dtype] = used
+
+    if meta:
+        result['__meta__'] = meta
+
+    return result
 
 def format_dir_summary(all_results: Dict[str, Dict[str, Set[str]]], root: Optional[Path] = None,
                        colors: Optional[Dict] = None) -> str:
@@ -946,7 +984,12 @@ def create_html_report(results: Dict[str, Set[str]], api_structure: Optional[Dic
                     meta_entry = _consume_metadata(data_type, value)
                     meta_bits: List[str] = []
                     if meta_entry:
-                        if 'line' in meta_entry:
+                        if 'file' in meta_entry:
+                            location = meta_entry['file']
+                            if meta_entry.get('line') is not None:
+                                location = f"{location}:{meta_entry['line']}"
+                            meta_bits.append(location)
+                        elif meta_entry.get('line') is not None:
                             meta_bits.append(f"line {meta_entry['line']}")
                         if 'username' in meta_entry:
                             meta_bits.append(f"user {meta_entry['username']}")
@@ -1068,30 +1111,49 @@ def create_csv_report(results: Dict[str, Set[str]], output_file: str = "file_ana
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir, exist_ok=True)
     
+    metadata_lookup: Dict[str, List[Dict[str, Any]]] = {}
+    if isinstance(results, dict) and '__meta__' in results and isinstance(results['__meta__'], dict):
+        metadata_lookup = {k: list(v) for k, v in results['__meta__'].items() if isinstance(v, list)}
+
+    def _consume_meta(dtype: str, value: str) -> Optional[Dict[str, Any]]:
+        entries = metadata_lookup.get(dtype)
+        if not entries:
+            return None
+        for idx, entry in enumerate(entries):
+            if entry.get('value') == value:
+                return entries.pop(idx)
+        return None
+
     with open(output_file, 'w', newline='', encoding='utf-8') as f:
         writer = csv.writer(f)
-        
+
         # Write header
-        writer.writerow(['Category', 'Type', 'Value', 'Severity'])
-        
+        writer.writerow(['Category', 'Type', 'Value', 'Severity', 'File', 'Line', 'Possible Owner'])
+
         # Write data
         for category, values in sorted(results.items()):
+            if category == '__meta__':
+                continue
             if not isinstance(values, set) or not values:
                 continue
-                
+
             severity = "High" if category in [
-                'password', 'private_key', 'api_key', 'aws_key', 'credit_card', 
+                'password', 'private_key', 'api_key', 'aws_key', 'credit_card',
                 'security_smells', 'network_security_issues'
             ] else "Medium" if category in [
                 'high_entropy_strings', 'jwt', 'oauth_token', 'session_id'
             ] else "Low"
-            
+
             for value in sorted(values):
+                meta = _consume_meta(category, value)
                 writer.writerow([
                     category.replace('_', ' ').title(),
                     category,
                     value,
-                    severity
+                    severity,
+                    meta.get('file') if meta else '',
+                    meta.get('line') if meta and meta.get('line') is not None else '',
+                    meta.get('username') if meta else ''
                 ])
     
     print(f"CSV report created at {output_file}") 

@@ -21,6 +21,7 @@ from .utils.output_formatter import (
     create_dir_summary_html,
     export_dir_summary_json,
     aggregate_results_by_plugin,
+    aggregated_payload_to_results,
 )
 
 
@@ -548,36 +549,46 @@ def _write_text_file(path: Path, content: str) -> None:
 def _format_plugin_text(plugin_name: str, results: Dict[str, Any]) -> str:
     header = f"Plugin: {plugin_name}"
     lines = [header, "=" * len(header), ""]
-    entries_map: Dict[str, List[Dict[str, Any]]] = results.get('entries', {}) if isinstance(results, dict) else {}
-    categories_map: Dict[str, Set[str]] = results.get('categories', {}) if isinstance(results, dict) else {}
-    has_values = any(entries_map.get(k) for k in entries_map)
+    if not isinstance(results, dict):
+        lines.append("No findings detected.")
+        return "\n".join(lines).strip() + "\n"
 
-    for category in sorted(entries_map.keys()):
-        cat_entries = entries_map.get(category) or []
-        if not cat_entries:
+    categories_map: Dict[str, Set[str]] = {
+        k: v for k, v in results.items() if isinstance(v, set) and k != '__meta__'
+    }
+    meta_lookup: Dict[str, List[Dict[str, Any]]] = {
+        k: [dict(entry) for entry in v if isinstance(entry, dict)]
+        for k, v in results.get('__meta__', {}).items()
+        if isinstance(v, list)
+    }
+
+    has_values = False
+    for category in sorted(categories_map.keys()):
+        values = sorted(categories_map[category])
+        entries = meta_lookup.get(category, [])
+        if not values and not entries:
             continue
+        has_values = True
         lines.append(f"[{category}]")
-        for entry in cat_entries:
-            location = entry.get('file')
+        used_values: Set[str] = set()
+        for entry in entries:
+            value = entry.get('value')
+            if not value:
+                continue
+            used_values.add(value)
+            location = entry.get('file') or "unknown"
             if entry.get('line') is not None:
                 location = f"{location}:{entry['line']}"
-            value = entry.get('value', '')
             lines.append(f"  - value: {value}")
             lines.append(f"    location: {location}")
             if entry.get('username'):
                 lines.append(f"    possible owner: {entry['username']}")
-        lines.append("")
-
-    if not has_values and categories_map:
-        for category in sorted(categories_map.keys()):
-            values = sorted(categories_map[category])
-            if not values:
+        for value in values:
+            if value in used_values:
                 continue
-            lines.append(f"[{category}]")
-            for value in values:
-                lines.append(f"  - value: {value}")
-            lines.append("")
-        has_values = bool(categories_map)
+            lines.append(f"  - value: {value}")
+            lines.append("    location: unknown")
+        lines.append("")
 
     if not has_values:
         lines.append("No findings detected.")
@@ -618,18 +629,18 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args):
                 for plugin_name, agg_results in plugin_buckets.items():
                     base = out_dir / f"plugin-{plugin_name}"
                     text_path = _suffix_path(base, '.txt')
+                    converted = aggregated_payload_to_results(agg_results)
                     try:
-                        _write_text_file(text_path, _format_plugin_text(plugin_name, agg_results))
+                        _write_text_file(text_path, _format_plugin_text(plugin_name, converted))
                         logging.info(f"Wrote plugin text report: {text_path}")
                     except Exception as exc:
                         logging.warning(f"Failed writing plugin text report {plugin_name}: {exc}")
-                    categories = agg_results.get('categories', {}) if isinstance(agg_results, dict) else {}
                     if args.json:
-                        export_results_json(categories, str(_suffix_path(base, '.json')))
+                        export_results_json(converted, str(_suffix_path(base, '.json')))
                     if args.html:
-                        create_html_report(categories, None, str(_suffix_path(base, '.html')))
+                        create_html_report(converted, None, str(_suffix_path(base, '.html')))
                     if args.csv:
-                        create_csv_report(categories, str(_suffix_path(base, '.csv')))
+                        create_csv_report(converted, str(_suffix_path(base, '.csv')))
                 logging.info(
                     f"Wrote plugin-aggregated reports: {', '.join(sorted(plugin_buckets.keys()))}"
                 )
