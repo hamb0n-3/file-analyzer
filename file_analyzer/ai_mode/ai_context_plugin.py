@@ -37,7 +37,7 @@ class OllamaLLM:
     SYSTEM_PROMPT = (
         "You are a cybersecurity assistant. Given a raw value and a short context snippet, "
         "classify whether it is a secret, whether it is a key, token, cert, hash, password, PII, or PHI. If it is not, ONLY respond with an empty json {}. If it is a secret, respond with strict JSON containing keys: "
-        "SECRET, type, username (optional), usage, reasoning, file location."
+        "{SECRET, type, username (optional), usage, reasoning, file location.}"
     )
 
     def __init__(self, model: str = "qwen3-4b:latest", host: Optional[str] = None) -> None:
@@ -199,7 +199,7 @@ class SecretsContextPlugin(AnalyzerPlugin):
 
     def __init__(
         self,
-        model: str = "qwen3-4b:latest",
+        model: str = "qwen3-1.7b:latest",
         use_llm: bool = True,
         ollama_host: Optional[str] = None,
         preview_count: int = 0,
