@@ -36,8 +36,8 @@ class OllamaLLM:
 
     SYSTEM_PROMPT = (
         "You are a cybersecurity assistant. Given a raw value and a short context snippet, "
-        "classify whether it is significant to security, whether its a secret, key, token, cert, hash, password, or endpoint. Respond with strict JSON containing keys: "
-        "value, type, username (optional), usage, reasoning, file location."
+        "classify whether it is a secret, whether it is a key, token, cert, hash, password, PII, or PHI. If it is not, ONLY respond with an empty json {}. If it is a secret, respond with strict JSON containing keys: "
+        "SECRET, type, username (optional), usage, reasoning, file location."
     )
 
     def __init__(self, model: str = "qwen3-4b:latest", host: Optional[str] = None) -> None:
@@ -59,7 +59,7 @@ class OllamaLLM:
                     f"FILE TYPE: {language}\n"
                     f"SECRET: {raw_secret}\n"
                     f"CONTEXT:\n{context_snippet}\n"
-                    "Reply with JSON only using these keys {value, type, username (optional), usage, reasoning, file location}."
+                    "Reply with JSON only using these keys {SECRET, type, username (optional), usage, reasoning, file location}."
                 ),
             },
         ]
