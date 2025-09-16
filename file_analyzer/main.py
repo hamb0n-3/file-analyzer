@@ -850,6 +850,27 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
     out_dir = Path(getattr(args, 'output_dir', None) or Path.cwd())
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    base64_records: List[Dict[str, Any]] = []
+    base64_seen: Set[Tuple[str, Optional[int], str]] = set()
+    for file_path_str, res in all_results.items():
+        entries = res.get('__base64__')
+        if not entries or not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            record = dict(entry)
+            record.setdefault('file', file_path_str)
+            key = (
+                record.get('file') or file_path_str,
+                record.get('line') if isinstance(record.get('line'), int) else None,
+                record.get('original_base64'),
+            )
+            if not record.get('original_base64') or key in base64_seen:
+                continue
+            base64_seen.add(key)
+            base64_records.append(record)
+
     command = getattr(args, 'command', None)
     root_path: Optional[Path] = None
     if command == 'dir':
@@ -878,6 +899,26 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
         logging.info(f"Wrote summary JSON: {summary_json_path}")
     except Exception as exc:
         logging.warning(f"Failed to write summary JSON: {exc}")
+
+    try:
+        if base64_records:
+            base64_records.sort(key=lambda item: (
+                item.get('file', ''),
+                item.get('line', -1) if isinstance(item.get('line'), int) else -1,
+                item.get('original_base64', '')
+            ))
+            base64_payload = {
+                'generated_at': generated_at,
+                'plugins': selection_label,
+                'count': len(base64_records),
+                'blobs': base64_records,
+            }
+            base64_path = out_dir / 'base64blobs.json'
+            _ensure_parent(base64_path)
+            base64_path.write_text(json.dumps(base64_payload, indent=2, ensure_ascii=False), encoding='utf-8')
+            logging.info(f"Wrote base64 blob output: {base64_path}")
+    except Exception as exc:
+        logging.warning(f"Failed to write base64 blob output: {exc}")
 
     try:
         summary_txt = format_dir_summary(all_results, root=root_path, colors=None, metadata=summary_meta)
@@ -915,6 +956,10 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
         logging.info(f"Wrote aggregated plugin JSON: {plugins_json_path}")
     except Exception as exc:
         logging.warning(f"Failed to write aggregated plugin JSON: {exc}")
+
+    for res in all_results.values():
+        if isinstance(res, dict) and '__base64__' in res:
+            res.pop('__base64__', None)
 
     for file_path_str, results in all_results.items():
         file_path = Path(file_path_str)

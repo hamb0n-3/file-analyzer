@@ -3,11 +3,12 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Pattern, Set
+from typing import Any, Dict, List, Optional, Pattern, Set
 
 from .base_plugin import AnalyzerPlugin
 from ..utils.file_utils import calculate_entropy, is_valid_base64
@@ -207,7 +208,15 @@ class SensitiveAnalyzer(AnalyzerPlugin):
                 )
                 (?:['\"])?
             """,
-            'base64_encoded': r"(?<![A-Za-z0-9+/=])(?:[A-Za-z0-9+/]{4}){10,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?(?![A-Za-z0-9+/=])",
+            'base64_encoded': r"""
+                (?<![A-Za-z0-9+/=])
+                (?:
+                    [A-Za-z0-9+/]{4}
+                    (?:[\r\n]+[ \t]*)?
+                ){10,}
+                (?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{4})
+                (?![A-Za-z0-9+/=])
+            """,
             'credit_card': r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b",
             'social_security': r"\b\d{3}-\d{2}-\d{4}\b",
             'database_connection': r"(?i)(?:mysql|postgres(?:ql)?|mongodb|sqlserver)://[^:\s]+:[^@\s]+@[^:\s]+(?::\d+)?/[A-Za-z0-9._-]+",
@@ -236,6 +245,7 @@ class SensitiveAnalyzer(AnalyzerPlugin):
 
         # Line-oriented passes for most rules
         lines = content.splitlines()
+        base64_seen: Set[tuple[str, Optional[int], str]] = set()
         for rule in self.rules:
             # Fast path: multiline-only rules handled in a separate pass
             if self._is_multiline_rule(rule):
@@ -270,10 +280,29 @@ class SensitiveAnalyzer(AnalyzerPlugin):
         # Additional direct regex scans for migrated patterns
         for key, pat in self.migrated_patterns.items():
             try:
-                flags = re.VERBOSE if key == 'api_key' else 0
+                flags = re.VERBOSE if key in {'api_key', 'base64_encoded'} else 0
                 for m in re.finditer(pat, content, flags):
                     val = m.group(1) if m.lastindex else m.group(0)
-                    if key == 'base64_encoded' and not is_valid_base64(val):
+                    if key == 'base64_encoded':
+                        normalized = self._normalize_base64_value(val)
+                        if not normalized or not is_valid_base64(normalized):
+                            continue
+                        line_no = self._line_number_from_offset(content, m.start())
+                        username = self._guess_context_username(lines, line_no, None, normalized)
+                        end_line = self._line_number_from_offset(content, m.end() - 1)
+                        signature = (str(file_path), line_no, normalized)
+                        if signature in base64_seen:
+                            continue
+                        base64_seen.add(signature)
+                        self._record_base64_blob(
+                            results,
+                            normalized,
+                            raw_value=val,
+                            file_path=file_path,
+                            line_no=line_no,
+                            end_line=end_line,
+                            username=username,
+                        )
                         continue
                     if key == 'credit_card' and not self._passes_luhn(val):
                         continue
@@ -395,6 +424,58 @@ class SensitiveAnalyzer(AnalyzerPlugin):
                     existing['username'] = username
                 return
         meta.append(entry)
+
+    def _normalize_base64_value(self, value: str) -> str:
+        if not value:
+            return ""
+        # Remove whitespace characters commonly used to wrap base64 blobs
+        normalized = "".join(value.split())
+        return normalized.strip()
+
+    def _record_base64_blob(
+        self,
+        results: Dict[str, Set[str]],
+        normalized: str,
+        *,
+        raw_value: str,
+        file_path: Path,
+        line_no: Optional[int],
+        end_line: Optional[int],
+        username: Optional[str],
+    ) -> None:
+        try:
+            decoded_bytes = base64.b64decode(normalized, validate=True)
+        except Exception:
+            return
+
+        decoded_encoding = 'utf-8'
+        try:
+            decoded_text = decoded_bytes.decode('utf-8')
+        except UnicodeDecodeError:
+            decoded_encoding = 'latin-1'
+            decoded_text = decoded_bytes.decode('latin-1')
+
+        entry: Dict[str, Any] = {
+            'file': str(file_path),
+            'original_base64': normalized,
+            'decoded': decoded_text,
+            'decoded_encoding': decoded_encoding,
+            'decoded_size': len(decoded_bytes),
+        }
+        if line_no is not None:
+            entry['line'] = int(line_no)
+        if end_line is not None and end_line != line_no:
+            entry['end_line'] = int(end_line)
+        if username:
+            entry['username'] = username
+        # Preserve a small excerpt of the raw matched text for context when it differs from normalized
+        raw_excerpt = raw_value.strip()
+        if raw_excerpt and raw_excerpt != normalized:
+            entry['raw_excerpt'] = raw_excerpt[:2000]
+
+        base64_bucket = results.setdefault('__base64__', [])
+        if isinstance(base64_bucket, list):
+            base64_bucket.append(entry)
 
     def _line_number_from_offset(self, content: str, offset: int) -> Optional[int]:
         if offset is None or offset < 0:
