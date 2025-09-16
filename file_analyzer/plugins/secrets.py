@@ -1062,14 +1062,14 @@ def emit_sarif(findings: Sequence[Finding]) -> str:
 RULE_LOOKUP = {rule.id: rule for rule in DEFAULT_RULES}
 
 
-class SensitiveAnalyzer(AnalyzerPlugin):
+class SecretsAnalyzer(AnalyzerPlugin):
     """AnalyzerPlugin wrapper around the advanced secret scanner."""
 
     requires_full_content: bool = True
 
     def __init__(self, config: Optional[Dict] = None):
         super().__init__(config)
-        self.tags = {"secret", "sensitive"}
+        self.tags = {"secrets"}
         cfg = ScanConfig(
             max_file_size=int(self.config.get("max_file_size", 2_000_000)),
             follow_symlinks=bool(self.config.get("follow_symlinks", False)),

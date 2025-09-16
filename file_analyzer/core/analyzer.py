@@ -18,6 +18,18 @@ from functools import lru_cache
 
 from ..plugins.plugin_registry import PluginRegistry
 from ..utils.file_utils import read_file_content, detect_file_type, calculate_entropy, is_text_like_file
+
+PLUGIN_TYPE_TAGS = {
+    'code_analyzer': {'code'},
+    'api_analyzer': {'api'},
+    'endpoints_analyzer': {'endpoints'},
+    'network_analyzer': {'network'},
+    'binary_analyzer': {'binary'},
+    'ml_analyzer': {'ml'},
+    'data_analyzer': set(),
+    'core_analyzer': {'core'},
+    'secret_analyzer': {'secrets'},
+}
 import re
 
 
@@ -77,6 +89,9 @@ class FileAnalyzer:
         
         # Load plugins
         self._load_plugins()
+
+        # Validate any requested plugin tags early to catch misconfiguration
+        self._validate_enabled_plugins()
     
     def _setup_logging(self) -> None:
         """Set up logging configuration."""
@@ -166,7 +181,38 @@ class FileAnalyzer:
             logging.debug(f"Loaded {loaded_plugins} plugins")
         except Exception as e:
             logging.error(f"Error loading plugins: {str(e)}")
-    
+
+    def _validate_enabled_plugins(self) -> None:
+        """Ensure any configured plugin selection references known tags."""
+        enabled = self.config.get('enabled_plugins')
+        if not enabled:
+            return
+        if isinstance(enabled, str):
+            requested = {t.strip().lower() for t in enabled.split(',') if t.strip()}
+        elif isinstance(enabled, (list, set, tuple)):
+            requested = {str(t).strip().lower() for t in enabled if str(t).strip()}
+        else:
+            return
+        if not requested or 'all' in requested:
+            return
+
+        known_tags = {'all'}
+        known_tags |= {tag.lower() for tags in PLUGIN_TYPE_TAGS.values() for tag in tags}
+        for plugin_list in self.plugin_registry.plugins.values():
+            for plugin in plugin_list:
+                tags = getattr(plugin, 'tags', set()) or set()
+                known_tags |= {tag.lower() for tag in tags}
+                plugin_type = getattr(plugin, 'plugin_type', '')
+                known_tags |= {tag.lower() for tag in PLUGIN_TYPE_TAGS.get(plugin_type, set())}
+                cname = plugin.__class__.__name__.lower()
+                for suffix in ('json', 'xml'):
+                    if suffix in cname:
+                        known_tags.add(suffix)
+
+        unknown = requested - known_tags
+        if unknown:
+            raise ValueError(f"Unknown plugin group(s): {', '.join(sorted(unknown))}")
+
     def analyze_file(self, file_path: str) -> Dict[str, Any]:
         """
         Analyze a file and extract relevant information.
@@ -289,30 +335,29 @@ class FileAnalyzer:
                 enabled = {str(t).strip().lower() for t in cfg_enabled}
         if enabled and 'all' not in enabled:
             def plugin_tags(p) -> set:
-                # Base tags from plugin, plus mapping from type
                 tags = set(getattr(p, 'tags', set()) or set())
                 t = getattr(p, 'plugin_type', '')
-                mapping = {
-                    'code_analyzer': {'code'},
-                    'api_analyzer': {'api'},
-                    'endpoints_analyzer': {'endpoints'},
-                    'network_analyzer': {'network'},  # legacy alias if any remain
-                    'binary_analyzer': {'binary'},
-                    'ml_analyzer': {'ml'},
-                    'data_analyzer': set(),
-                    'core_analyzer': {'core'},
-                }
-                tags |= mapping.get(t, set())
-                # Derive a general tag from class name as a convenience
+                tags |= PLUGIN_TYPE_TAGS.get(t, set())
                 cname = p.__class__.__name__.lower()
                 for k in ('json', 'xml'):
                     if k in cname:
                         tags.add(k)
                 return {x.lower() for x in tags}
 
-            # Always include core analyzers regardless of selection
+            tag_map = {p: plugin_tags(p) for p in applicable_plugins}
+            available_tags = {"all"}
+            for tokens in PLUGIN_TYPE_TAGS.values():
+                for tok in tokens:
+                    available_tags.add(tok.lower())
+            for tags in tag_map.values():
+                available_tags |= tags
+
+            unknown = {token for token in enabled if token not in available_tags}
+            if unknown:
+                raise ValueError(f"Unknown plugin group(s): {', '.join(sorted(unknown))}")
+
             core_plugins = [p for p in applicable_plugins if getattr(p, 'plugin_type', '') == 'core_analyzer' or 'core' in (getattr(p, 'tags', set()) or set())]
-            filtered = [p for p in applicable_plugins if p not in core_plugins and (plugin_tags(p) & enabled)]
+            filtered = [p for p in applicable_plugins if p not in core_plugins and (tag_map[p] & enabled)]
             applicable_plugins = core_plugins + filtered
         
         for plugin in applicable_plugins:
