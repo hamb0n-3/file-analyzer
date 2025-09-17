@@ -31,6 +31,18 @@ except Exception:  # pragma: no cover - fallback for standalone usage
             raise NotImplementedError
 
 
+PreviewCallback = Callable[
+    [
+        List[Dict[str, str]],
+        str,
+        Optional[Dict[str, Any]],
+        Optional[Dict[str, Any]],
+        Optional[Dict[str, Any]],
+    ],
+    None,
+]
+
+
 class OllamaLLM:
     """Thin wrapper that now routes classification through ``llama.cpp`` instead of Ollama."""
 
@@ -117,7 +129,7 @@ class OllamaLLM:
         context_snippet: str,
         *,
         messages: Optional[List[Dict[str, str]]] = None,
-        preview_callback: Optional[Callable[[List[Dict[str, str]], str, Optional[Dict[str, Any]]], None]] = None,
+        preview_callback: Optional[PreviewCallback] = None,
     ) -> Optional[Dict[str, Any]]:
         messages = messages or self.build_messages(raw_secret, language, context_snippet)
         self.last_usage = {}
@@ -132,6 +144,8 @@ class OllamaLLM:
             logging.warning("llama.cpp chat failed: %s", exc)
             return None
 
+        usage_info: Optional[Dict[str, Any]] = None
+        timings_info: Optional[Dict[str, Any]] = None
         if isinstance(response, dict):
             usage_info = response.get("usage")
             timings_info = response.get("timings")
@@ -149,7 +163,7 @@ class OllamaLLM:
             parsed = self._parse_json_response(content)
         if preview_callback:
             try:
-                preview_callback(messages, content, parsed)
+                preview_callback(messages, content, parsed, usage_info, timings_info)
             except Exception:
                 logging.debug("Preview callback raised an exception", exc_info=True)
         return parsed
@@ -319,19 +333,32 @@ class SecretsContextPlugin(AnalyzerPlugin):
         except Exception:
             self._search_base_dirs = []
         total_items = len(manifest)
+        target_items = min(total_items, self.preview_count) if self.preview_count else total_items
         failures = 0
         llm_attempts = 0
         llm_successes = 0
         llm_total_latency = 0.0
         llm_max_latency = 0.0
         start_time = time.perf_counter()
-        progress_bar = self._start_progress_bar(total_items)
+        progress_bar = self._start_progress_bar(target_items)
         text_progress_active = False
-        if progress_bar is None and total_items > 0 and sys.stderr.isatty():
+        if progress_bar is None and target_items > 0 and sys.stderr.isatty():
             text_progress_active = True
-            print(f"Enriching secrets: 0/{total_items}", end="", file=sys.stderr, flush=True)
+            print(
+                f"Enriching secrets: 0/{target_items}",
+                end="",
+                file=sys.stderr,
+                flush=True,
+            )
+
+        items_attempted = 0
+        preview_limit_reached = False
 
         for idx, item in enumerate(manifest):
+            if target_items and items_attempted >= target_items:
+                preview_limit_reached = self.preview_count > 0
+                break
+            items_attempted += 1
             llm_attempted = False
             try:
                 analysis, llm_info, llm_attempted, llm_duration = self._analyze_one(item, idx)
@@ -352,10 +379,13 @@ class SecretsContextPlugin(AnalyzerPlugin):
                 if progress_bar:
                     progress_bar.update(1)
                 elif text_progress_active:
-                    current = idx + 1
-                    percent = (current / total_items) * 100 if total_items else 100
+                    current = items_attempted
+                    total_for_display = target_items if target_items else items_attempted
+                    percent = (
+                        (current / total_for_display) * 100 if total_for_display else 100
+                    )
                     print(
-                        f"\rEnriching secrets: {current}/{total_items} ({percent:5.1f}%)",
+                        f"\rEnriching secrets: {current}/{total_for_display} ({percent:5.1f}%)",
                         end="",
                         file=sys.stderr,
                         flush=True,
@@ -366,12 +396,20 @@ class SecretsContextPlugin(AnalyzerPlugin):
         elif text_progress_active:
             print(file=sys.stderr)
 
+        if preview_limit_reached:
+            message = f"Preview limit reached ({target_items}); stopping early."
+            logger.info(message)
+            if sys.stderr.isatty():
+                print(message, file=sys.stderr)
+
         elapsed = time.perf_counter() - start_time
         processed = len(analyses)
         llm_failures = max(llm_attempts - llm_successes, 0)
         llm_skipped = max(processed - llm_attempts, 0)
         stats: Dict[str, Any] = {
             "total_secrets": total_items,
+            "target_secrets": target_items,
+            "attempted": items_attempted,
             "processed": processed,
             "failures": failures,
             "llm_attempts": llm_attempts,
@@ -384,6 +422,9 @@ class SecretsContextPlugin(AnalyzerPlugin):
             "file_cache_misses": self._file_cache_misses,
             "cached_files": len(self._file_cache),
         }
+        if self.preview_count:
+            stats["preview_limit"] = target_items
+            stats["preview_stopped_early"] = preview_limit_reached
         if elapsed > 0:
             stats["secrets_per_second"] = round(processed / elapsed, 3)
         if llm_attempts > 0:
@@ -401,6 +442,8 @@ class SecretsContextPlugin(AnalyzerPlugin):
                 llm_total_latency,
                 stats["llm_avg_seconds"],
             )
+        if preview_limit_reached:
+            stats_message += f" | preview_limit={target_items}"
         logger.info(stats_message)
         if sys.stderr.isatty():
             print(stats_message, file=sys.stderr)
@@ -737,7 +780,7 @@ class SecretsContextPlugin(AnalyzerPlugin):
         index: int,
         item: SecretInput,
         language: str,
-    ) -> Callable[[List[Dict[str, str]], str, Optional[Dict[str, Any]]], None]:
+    ) -> PreviewCallback:
         secret_label = f"secret-{index + 1}"
         file_display = item.file
 
@@ -745,6 +788,8 @@ class SecretsContextPlugin(AnalyzerPlugin):
             sent_messages: List[Dict[str, str]],
             raw_response: str,
             parsed_response: Optional[Dict[str, Any]],
+            usage_payload: Optional[Dict[str, Any]],
+            timings_payload: Optional[Dict[str, Any]],
         ) -> None:
             if self._preview_shown >= self.preview_count:
                 return
@@ -767,6 +812,39 @@ class SecretsContextPlugin(AnalyzerPlugin):
             if parsed_response is not None:
                 print("-- Parsed JSON --", file=sys.stderr)
                 print(json.dumps(parsed_response, indent=2), file=sys.stderr)
+            prompt_tokens = 0
+            completion_tokens = 0
+            total_tokens = 0
+            prompt_tokens_per_second = 0.0
+            if isinstance(usage_payload, dict):
+                prompt_tokens = int(usage_payload.get("prompt_tokens") or 0)
+                completion_tokens = int(usage_payload.get("completion_tokens") or 0)
+                total_tokens = int(
+                    usage_payload.get("total_tokens")
+                    or (prompt_tokens + completion_tokens)
+                )
+            prompt_eval_seconds = 0.0
+            if isinstance(timings_payload, dict):
+                prompt_eval_ms = timings_payload.get("prompt_eval_time") or 0.0
+                prompt_eval_seconds = max(float(prompt_eval_ms) / 1000.0, 0.0)
+                if prompt_tokens and prompt_eval_seconds > 0:
+                    prompt_tokens_per_second = prompt_tokens / prompt_eval_seconds
+            print("-- Token Statistics --", file=sys.stderr)
+            print(
+                f"prompt_tokens={prompt_tokens} | completion_tokens={completion_tokens} | total_tokens={total_tokens}",
+                file=sys.stderr,
+            )
+            if prompt_tokens_per_second:
+                print(
+                    f"prompt_tokens_per_second={prompt_tokens_per_second:.3f} (over {prompt_eval_seconds:.3f}s)",
+                    file=sys.stderr,
+                )
+            else:
+                reason = "timing unavailable" if prompt_eval_seconds == 0.0 else "no prompt tokens"
+                print(
+                    f"prompt_tokens_per_second=N/A ({reason})",
+                    file=sys.stderr,
+                )
             print("=" * 40, file=sys.stderr)
             sys.stderr.flush()
 

@@ -524,9 +524,9 @@ class EnvAssignmentDetector(Detector):
             if len(val) < 8 or val.lower() in self.PLACEHOLDERS:
                 continue
             key_l = key.lower()
-            ctx = 0.0
-            if any(k in key_l for k in self.SUSPICIOUS_KEYS):
-                ctx += 0.2
+            if not any(token in key_l for token in self.SUSPICIOUS_KEYS):
+                continue
+            ctx = 0.2
             conf = 0.45 + ctx + _path_score(file)
             start_off = _line_col_to_offset(text, line_no, raw.find(val))
             yield Finding(
