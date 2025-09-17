@@ -1,0 +1,58 @@
+{
+  "secrets": [
+    {
+      "file": "test/fixtures/sample_project/app.py",
+      "value": "ZZZ_SUPER_SECRET",
+      "hint": "API_KEY"
+    },
+    {
+      "file": "test/fixtures/sample_project/app.py",
+      "value": "hardcoded-token",
+      "hint": "token"
+    },
+    {
+      "file": "test/fixtures/sample_project/settings.yaml",
+      "value": "yaml-secret-456"
+    },
+    {
+      "file": "test/fixtures/sample_project/services.py",
+      "value": "svc-key-555",
+      "hint": "service api key"
+    },
+    {
+      "file": "test/fixtures/sample_project/services.py",
+      "value": "oauth-client-secret-abc",
+      "hint": "oauth client"
+    },
+    {
+      "file": "test/fixtures/sample_project/routes/api_routes.js",
+      "value": "whsec_fixture_secret",
+      "hint": "webhook"
+    },
+    {
+      "file": "test/fixtures/sample_project/data/sample.json",
+      "value": "json-token-fixture",
+      "hint": "token"
+    },
+    {
+      "file": "test/fixtures/sample_project/templates/index.html",
+      "value": "fixture-html-secret",
+      "hint": "html data"
+    },
+    {
+      "file": "test/fixtures/sample_project/.env",
+      "value": "fixture-service-secret",
+      "hint": "env"
+    },
+    {
+      "file": "test/fixtures/sample_project/config.ini",
+      "value": "fixture-client-secret",
+      "hint": "client secret"
+    },
+    {
+      "file": "s3://mock-bucket/example.txt",
+      "value": "remote-secret",
+      "hint": "remote"
+    }
+  ]
+}

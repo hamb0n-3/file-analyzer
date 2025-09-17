@@ -1,0 +1,29 @@
+```
+=== File Analysis Results ===
+Run Details:
+  Generated: 2025-09-17 11:05:47
+  File: /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/data/sample.json
+  Plugins: secrets
+  Scan Mode: file
+
+File Metadata:
+  Accessed: 1758131225.625265
+  Created: 1758131167.8080442
+  File size: 314 bytes
+  Filename: sample.json
+  Group ID: 20
+  Modified: 1758131167.8080442
+  Owner ID: 501
+  Permissions: 33188
+
+Total Findings: 8
+
+================================================================================
+WARNING DISCLAIMER:
+--------------------------------------------------------------------------------
+This analysis is based on pattern matching and heuristics, and may not be exhaustive.
+Some API endpoints, credentials, or sensitive data might not be detected.
+Successful API request examples are based on contextual clues and might be incomplete.
+For critical security analysis, always perform manual verification.
+================================================================================
+```

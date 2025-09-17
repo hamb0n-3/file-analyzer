@@ -1,0 +1,44 @@
+{
+  "summary": {
+    "total_files": 7,
+    "total_findings": 94
+  },
+  "directories": {
+    "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/templates": [
+      {
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/templates/index.html",
+        "total_findings": 4
+      }
+    ],
+    "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project": [
+      {
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+        "total_findings": 14
+      },
+      {
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+        "total_findings": 13
+      },
+      {
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+        "total_findings": 15
+      },
+      {
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "total_findings": 34
+      }
+    ],
+    "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/data": [
+      {
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/data/sample.json",
+        "total_findings": 3
+      }
+    ],
+    "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/routes": [
+      {
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/routes/api_routes.js",
+        "total_findings": 11
+      }
+    ]
+  }
+}

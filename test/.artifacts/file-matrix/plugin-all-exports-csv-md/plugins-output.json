@@ -1,0 +1,341 @@
+{
+  "generated_at": "2025-09-17 11:05:48",
+  "plugin_selection": "all",
+  "plugins": {
+    "api": {
+      "total_findings": 10,
+      "categories": {
+        "webhook_url": [
+          "webhook: \"https://hooks.slack.com/services/T000/B000/fixture123\""
+        ],
+        "request_header": [
+          "logging:\n  level: INFO",
+          "notifications:\n  slack_webhook: \"https://hooks.slack.com/services/T000/B000/fixture123\"",
+          "secrets:\n  vault_path: \"kv/projects/sample\"",
+          "service:\n  endpoint: \"https://api.example.com/v2\""
+        ],
+        "api_framework": [
+          "JavaScript framework: Express",
+          "JavaScript framework: Jest",
+          "JavaScript framework: TypeScript",
+          "JavaScript framework: Webpack"
+        ],
+        "path_parameter": [
+          "/{user}"
+        ]
+      }
+    },
+    "code": {
+      "total_findings": 11,
+      "categories": {
+        "code_complexity": [
+          "Complex regex pattern at line 13",
+          "Complex regex pattern at line 7"
+        ],
+        "security_smells": [
+          "Hardcoded sensitive value in variable 'API_KEY' at line 10",
+          "Hardcoded sensitive value in variable 'DB_PASSWORD' at line 11",
+          "Hardcoded sensitive value in variable 'OAUTH_CLIENT_SECRET' at line 11",
+          "Hardcoded sensitive value in variable 'SERVICE_API_KEY' at line 10",
+          "Hardcoded sensitive value in variable 'SERVICE_TOKEN' at line 12",
+          "Unsanitized Inputs (line 12): const payload = req.body;"
+        ],
+        "code_quality": [
+          "Low maintainability index: 56.01/100"
+        ],
+        "commented_code": [
+          "Commented code at line 13",
+          "Commented code at line 21"
+        ]
+      }
+    },
+    "endpoints": {
+      "total_findings": 24,
+      "categories": {
+        "domain_keywords": [
+          "Object.keys",
+          "config.ini",
+          "db.internal.local",
+          "express.Router",
+          "hooks.example.internal",
+          "hooks.slack.com",
+          "module.exports",
+          "os.environ.get",
+          "req.body",
+          "res.json",
+          "router.get",
+          "router.post",
+          "self.DEFAULTS.get",
+          "self.overrides",
+          "self.overrides.get",
+          "self.timeout"
+        ],
+        "url": [
+          "https://hooks.example.internal/notify",
+          "https://hooks.slack.com/services/T000/B000/fixture123",
+          "postgresql://sample:db-pass-123@db.internal.local:5432",
+          "postgresql://{user}:{DB_PASSWORD}@{host}:5432"
+        ],
+        "network_protocols": [
+          "HTTPS",
+          "ICMP",
+          "Network protocol: HTTPS",
+          "Network protocol: ICMP"
+        ]
+      }
+    },
+    "secrets": {
+      "total_findings": 30,
+      "categories": {
+        "api_key": [
+          "Dict[str, bool] = {",
+          "Path(__file__).with_name(\"config.ini\")",
+          "ZZZ_SUPER_SECRET",
+          "alerts@example.com",
+          "backup-token-987",
+          "db-pass-123",
+          "fixture-client-id",
+          "fixture-client-secret",
+          "hashlib.sha256((payload + SERVICE_TOKEN).encode(\"utf-8\")).hexdigest()",
+          "https://api.example.com/v2",
+          "https://hooks.example.internal/notify",
+          "https://hooks.slack.com/services/T000/B000/fixture123",
+          "https://service.example.com",
+          "int = 10",
+          "kv/projects/sample",
+          "oauth-client-secret-abc",
+          "os.environ.get(\"SAMPLE_DB_HOST\", \"db.internal.local\")",
+          "overrides or {}",
+          "postgresql://sample:db-pass-123@db.internal.local:5432/sample",
+          "sample-project",
+          "str = SERVICE_ENDPOINT",
+          "svc-key-555",
+          "us-west-2",
+          "{DB_PASSWORD}"
+        ],
+        "access_token": [
+          "fixture-refresh-token",
+          "hardcoded-token",
+          "os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")",
+          "yaml-secret-456"
+        ],
+        "password": [
+          "API_KEY = \"ZZZ_SUPER_SECRET\"",
+          "db-pass-123",
+          "secret=\"fixture-html-secret\""
+        ]
+      },
+      "entries": {
+        "api_key": [
+          {
+            "value": "alerts@example.com",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+            "line": 17,
+            "username": "example.com"
+          },
+          {
+            "value": "backup-token-987",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+            "line": 21,
+            "username": "settings.yaml"
+          },
+          {
+            "value": "https://hooks.slack.com/services/T000/B000/fixture123",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+            "line": 16,
+            "username": "example.com"
+          },
+          {
+            "value": "https://api.example.com/v2",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+            "line": 2,
+            "username": "settings.yaml"
+          },
+          {
+            "value": "kv/projects/sample",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+            "line": 20,
+            "username": "example.com"
+          },
+          {
+            "value": "sample-project",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+            "line": 2,
+            "username": "config.ini"
+          },
+          {
+            "value": "db-pass-123",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+            "line": 11,
+            "username": "db.internal.local"
+          },
+          {
+            "value": "postgresql://sample:db-pass-123@db.internal.local:5432/sample",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+            "line": 11,
+            "username": "db.internal.local"
+          },
+          {
+            "value": "us-west-2",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+            "line": 3,
+            "username": "config.ini"
+          },
+          {
+            "value": "fixture-client-secret",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+            "line": 7,
+            "username": "config.ini"
+          },
+          {
+            "value": "https://hooks.example.internal/notify",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+            "line": 15,
+            "username": "config.ini"
+          },
+          {
+            "value": "fixture-client-id",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+            "line": 6,
+            "username": "config.ini"
+          },
+          {
+            "value": "oauth-client-secret-abc",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+            "line": 11,
+            "username": "services.py"
+          },
+          {
+            "value": "str = SERVICE_ENDPOINT",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+            "line": 26,
+            "username": "services.py"
+          },
+          {
+            "value": "svc-key-555",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+            "line": 10,
+            "username": "services.py"
+          },
+          {
+            "value": "int = 10",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+            "line": 27,
+            "username": "services.py"
+          },
+          {
+            "value": "https://service.example.com",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+            "line": 9,
+            "username": ".example.com"
+          },
+          {
+            "value": "Dict[str, bool] = {",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+            "line": 34,
+            "username": "app.py"
+          },
+          {
+            "value": "ZZZ_SUPER_SECRET",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+            "line": 10,
+            "username": "app.py"
+          },
+          {
+            "value": "overrides or {}",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+            "line": 41,
+            "username": "app.py"
+          },
+          {
+            "value": "Path(__file__).with_name(\"config.ini\")",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+            "line": 50,
+            "username": "app.py"
+          },
+          {
+            "value": "us-west-2",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+            "line": 14,
+            "username": "app.py"
+          },
+          {
+            "value": "{DB_PASSWORD}",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+            "line": 21,
+            "username": "app.py"
+          },
+          {
+            "value": "https://hooks.example.internal/notify",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+            "line": 13,
+            "username": "app.py"
+          },
+          {
+            "value": "hashlib.sha256((payload + SERVICE_TOKEN).encode(\"utf-8\")).hexdigest()",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+            "line": 27,
+            "username": "app.py"
+          },
+          {
+            "value": "os.environ.get(\"SAMPLE_DB_HOST\", \"db.internal.local\")",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+            "line": 20,
+            "username": "app.py"
+          }
+        ],
+        "access_token": [
+          {
+            "value": "yaml-secret-456",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+            "line": 3,
+            "username": "settings.yaml"
+          },
+          {
+            "value": "fixture-refresh-token",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+            "line": 8,
+            "username": "config.ini"
+          },
+          {
+            "value": "os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+            "line": 15,
+            "username": "services.py"
+          },
+          {
+            "value": "hardcoded-token",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+            "line": 12,
+            "username": "app.py"
+          }
+        ],
+        "password": [
+          {
+            "value": "secret=\"fixture-html-secret\"",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/templates/index.html",
+            "line": 10,
+            "username": "index.html"
+          },
+          {
+            "value": "API_KEY = \"ZZZ_SUPER_SECRET\"",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+            "line": 10,
+            "username": "app.py"
+          },
+          {
+            "value": "db-pass-123",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+            "line": 11,
+            "username": "app.py"
+          }
+        ]
+      }
+    }
+  },
+  "summary": {
+    "total_findings": 75,
+    "plugins_evaluated": 4,
+    "plugins_with_findings": 4
+  }
+}

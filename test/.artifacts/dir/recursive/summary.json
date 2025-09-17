@@ -1,0 +1,14 @@
+{
+  "summary": {
+    "total_files": 1,
+    "total_findings": 15
+  },
+  "directories": {
+    "src": [
+      {
+        "file": "src/api_client.js",
+        "total_findings": 15
+      }
+    ]
+  }
+}

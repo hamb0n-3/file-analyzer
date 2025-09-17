@@ -1,0 +1,3 @@
+2025-09-17 11:04:00,083 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 11:04:00,083 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 11:04:00,083 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'

@@ -1,0 +1,33 @@
+```
+=== File Analysis Results ===
+Run Details:
+  Generated: 2025-09-17 11:05:49
+  File: /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/data/sample.json
+  Plugins: all
+  Scan Mode: file
+
+File Metadata:
+  Accessed: 1758131225.625265
+  Created: 1758131167.8080442
+  File size: 314 bytes
+  Filename: sample.json
+  Group ID: 20
+  Modified: 1758131167.8080442
+  Owner ID: 501
+  Permissions: 33188
+
+Total Findings: 11
+
+Network (1 findings):
+  Network Protocols (1 found):
+    - HTTPS
+
+================================================================================
+WARNING DISCLAIMER:
+--------------------------------------------------------------------------------
+This analysis is based on pattern matching and heuristics, and may not be exhaustive.
+Some API endpoints, credentials, or sensitive data might not be detected.
+Successful API request examples are based on contextual clues and might be incomplete.
+For critical security analysis, always perform manual verification.
+================================================================================
+```

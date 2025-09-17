@@ -1,0 +1,44 @@
+{
+  "_metadata": {
+    "generated_by": "file-analyzer",
+    "timestamp": "2025-09-17T11:05:47.804537",
+    "version": "1.0.0"
+  },
+  "access_token": [
+    "os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")"
+  ],
+  "api_key": [
+    "https://service.example.com",
+    "int = 10",
+    "oauth-client-secret-abc",
+    "str = SERVICE_ENDPOINT",
+    "svc-key-555"
+  ],
+  "aws_key": [],
+  "base64_encoded": [],
+  "cookie": [],
+  "credit_card": [],
+  "database_connection": [],
+  "email": [],
+  "file_metadata": [
+    "Accessed: 1758131150.3061883",
+    "Created: 1758131149.85321",
+    "File size: 852 bytes",
+    "Filename: services.py",
+    "Group ID: 20",
+    "Modified: 1758131149.85321",
+    "Owner ID: 501",
+    "Permissions: 33188"
+  ],
+  "high_entropy_strings": [],
+  "jwt": [],
+  "oauth_token": [],
+  "password": [],
+  "private_key": [],
+  "refresh_token": [],
+  "runtime_errors": [],
+  "session_id": [],
+  "social_security": [],
+  "username": [],
+  "xml_response": []
+}

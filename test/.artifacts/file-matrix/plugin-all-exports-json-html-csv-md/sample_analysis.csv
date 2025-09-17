@@ -1,0 +1,12 @@
+Category,Type,Value,Severity,File,Line,Possible Owner
+ Json Top Keys,_json_top_keys,service,Low,,,
+ Json Top Keys,_json_top_keys,users,Low,,,
+File Metadata,file_metadata,Accessed: 1758131225.625265,Low,,,
+File Metadata,file_metadata,Created: 1758131167.8080442,Low,,,
+File Metadata,file_metadata,File size: 314 bytes,Low,,,
+File Metadata,file_metadata,Filename: sample.json,Low,,,
+File Metadata,file_metadata,Group ID: 20,Low,,,
+File Metadata,file_metadata,Modified: 1758131167.8080442,Low,,,
+File Metadata,file_metadata,Owner ID: 501,Low,,,
+File Metadata,file_metadata,Permissions: 33188,Low,,,
+Network Protocols,network_protocols,HTTPS,Low,,,

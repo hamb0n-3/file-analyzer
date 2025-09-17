@@ -1,0 +1,70 @@
+{
+  "version": "1.0",
+  "plugin": "SecretsContextPlugin",
+  "generated_at": "2025-09-17T18:05:42Z",
+  "inputs": {
+    "manifest_path": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/advanced_manifest.json"
+  },
+  "results": [
+    {
+      "id": "secret-1",
+      "source_file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/advanced_project/src/helper.py",
+      "language": "python",
+      "secret_value": "adv-helper-token-xyz",
+      "secret_length": 20,
+      "secret_entropy": 3.846,
+      "occurrences": [
+        {
+          "line": 6,
+          "column": 18
+        }
+      ],
+      "context_snippet": "    2: \n    3: import os\n    4: import hashlib\n    5: \n    6: EXAMPLE_TOKEN = \"adv-helper-token-xyz\"\n    7: \n    8: \n    9: def compute_checksum(path: str) -> str:\n   10:     \"\"\"Return the SHA256 checksum for the given path.\"\"\"",
+      "var_name": "python"
+    },
+    {
+      "id": "secret-2",
+      "source_file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/advanced_project/src/nested/secrets.txt",
+      "language": "text",
+      "secret_value": "pk_live_51JadFakeKeyForFixture",
+      "secret_length": 30,
+      "secret_entropy": 4.148,
+      "occurrences": [
+        {
+          "line": 2,
+          "column": 13
+        }
+      ],
+      "context_snippet": "    1: ADV_SECRET=adv-secret-001\n    2: PAYMENT_KEY=pk_live_51JadFakeKeyForFixture\n    3: # High entropy string ensures entropy helper has data\n    4: token: QWxhZGRpbjpPcGVuU2VzYW1l",
+      "var_name": "stripe"
+    },
+    {
+      "id": "secret-3",
+      "source_file": "https:/example.invalid/remote.json",
+      "language": "json",
+      "secret_value": "REMOTE_ADV_SECRET",
+      "secret_length": 17,
+      "secret_entropy": 3.264,
+      "occurrences": [],
+      "context_snippet": "",
+      "var_name": "remote"
+    }
+  ],
+  "statistics": {
+    "total_secrets": 3,
+    "processed": 3,
+    "failures": 0,
+    "llm_attempts": 3,
+    "llm_successes": 0,
+    "llm_failures": 3,
+    "llm_skipped": 0,
+    "duration_seconds": 0.0,
+    "llm_total_seconds": 0.0,
+    "file_cache_hits": 0,
+    "file_cache_misses": 2,
+    "cached_files": 2,
+    "secrets_per_second": 9536.434,
+    "llm_avg_seconds": 0.0,
+    "llm_max_seconds": 0.0
+  }
+}

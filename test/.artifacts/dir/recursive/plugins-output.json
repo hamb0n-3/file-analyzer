@@ -1,0 +1,68 @@
+{
+  "generated_at": "2025-09-17 11:05:42",
+  "plugin_selection": "all",
+  "plugins": {
+    "code": {
+      "total_findings": 2,
+      "categories": {
+        "code_complexity": [
+          "Complex regex pattern at line 2",
+          "Complex regex pattern at line 8"
+        ]
+      }
+    },
+    "endpoints": {
+      "total_findings": 10,
+      "categories": {
+        "domain_keywords": [
+          "JSON.stringify",
+          "response.json",
+          "response.ok",
+          "response.status"
+        ],
+        "network_protocols": [
+          "Fetch API",
+          "HTTP",
+          "HTTPS",
+          "Network protocol: Fetch API",
+          "Network protocol: HTTP",
+          "Network protocol: HTTPS"
+        ]
+      }
+    },
+    "secrets": {
+      "total_findings": 2,
+      "categories": {
+        "api_key": [
+          "JSON.stringify({ userId })"
+        ],
+        "access_token": [
+          "Bearer ADV_PROJ_KEY_987654"
+        ]
+      },
+      "entries": {
+        "api_key": [
+          {
+            "value": "JSON.stringify({ userId })",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/advanced_project/src/api_client.js",
+            "line": 12,
+            "username": "api_client.js"
+          }
+        ],
+        "access_token": [
+          {
+            "value": "Bearer ADV_PROJ_KEY_987654",
+            "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/advanced_project/src/api_client.js",
+            "line": 9,
+            "username": "api_client.js"
+          }
+        ]
+      }
+    }
+  },
+  "summary": {
+    "total_findings": 14,
+    "plugins_evaluated": 3,
+    "plugins_with_findings": 3
+  }
+}

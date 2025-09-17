@@ -1,0 +1,125 @@
+Aggregated Plugin Findings
+==========================
+Generated: 2025-09-17 11:05:49
+Plugin selection: all
+
+[api]
+Total findings: 10
+  api_framework:
+    - JavaScript framework: Express
+    - JavaScript framework: Jest
+    - JavaScript framework: TypeScript
+    - JavaScript framework: Webpack
+
+  path_parameter:
+    - /{user}
+
+  request_header:
+    - logging:
+  level: INFO
+    - notifications:
+  slack_webhook: "https://hooks.slack.com/services/T000/B000/fixture123"
+    - secrets:
+  vault_path: "kv/projects/sample"
+    - service:
+  endpoint: "https://api.example.com/v2"
+
+  webhook_url:
+    - webhook: "https://hooks.slack.com/services/T000/B000/fixture123"
+
+
+[code]
+Total findings: 11
+  code_complexity:
+    - Complex regex pattern at line 13
+    - Complex regex pattern at line 7
+
+  code_quality:
+    - Low maintainability index: 56.01/100
+
+  commented_code:
+    - Commented code at line 13
+    - Commented code at line 21
+
+  security_smells:
+    - Hardcoded sensitive value in variable 'API_KEY' at line 10
+    - Hardcoded sensitive value in variable 'DB_PASSWORD' at line 11
+    - Hardcoded sensitive value in variable 'OAUTH_CLIENT_SECRET' at line 11
+    - Hardcoded sensitive value in variable 'SERVICE_API_KEY' at line 10
+    - Hardcoded sensitive value in variable 'SERVICE_TOKEN' at line 12
+    - Unsanitized Inputs (line 12): const payload = req.body;
+
+
+[endpoints]
+Total findings: 24
+  domain_keywords:
+    - Object.keys
+    - config.ini
+    - db.internal.local
+    - express.Router
+    - hooks.example.internal
+    - hooks.slack.com
+    - module.exports
+    - os.environ.get
+    - req.body
+    - res.json
+    - router.get
+    - router.post
+    - self.DEFAULTS.get
+    - self.overrides
+    - self.overrides.get
+    - self.timeout
+
+  network_protocols:
+    - HTTPS
+    - ICMP
+    - Network protocol: HTTPS
+    - Network protocol: ICMP
+
+  url:
+    - https://hooks.example.internal/notify
+    - https://hooks.slack.com/services/T000/B000/fixture123
+    - postgresql://sample:db-pass-123@db.internal.local:5432
+    - postgresql://{user}:{DB_PASSWORD}@{host}:5432
+
+
+[secrets]
+Total findings: 30
+  access_token:
+    - yaml-secret-456 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:3) [possible owner: settings.yaml]
+    - fixture-refresh-token (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:8) [possible owner: config.ini]
+    - os.environ.get("SERVICE_API_SECRET", "fixture-service-secret") (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:15) [possible owner: services.py]
+    - hardcoded-token (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:12) [possible owner: app.py]
+
+  api_key:
+    - alerts@example.com (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:17) [possible owner: example.com]
+    - backup-token-987 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:21) [possible owner: settings.yaml]
+    - https://hooks.slack.com/services/T000/B000/fixture123 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:16) [possible owner: example.com]
+    - https://api.example.com/v2 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:2) [possible owner: settings.yaml]
+    - kv/projects/sample (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:20) [possible owner: example.com]
+    - sample-project (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:2) [possible owner: config.ini]
+    - db-pass-123 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:11) [possible owner: db.internal.local]
+    - postgresql://sample:db-pass-123@db.internal.local:5432/sample (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:11) [possible owner: db.internal.local]
+    - us-west-2 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:3) [possible owner: config.ini]
+    - fixture-client-secret (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:7) [possible owner: config.ini]
+    - https://hooks.example.internal/notify (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:15) [possible owner: config.ini]
+    - fixture-client-id (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:6) [possible owner: config.ini]
+    - oauth-client-secret-abc (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:11) [possible owner: services.py]
+    - str = SERVICE_ENDPOINT (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:26) [possible owner: services.py]
+    - svc-key-555 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:10) [possible owner: services.py]
+    - int = 10 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:27) [possible owner: services.py]
+    - https://service.example.com (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:9) [possible owner: .example.com]
+    - Dict[str, bool] = { (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:34) [possible owner: app.py]
+    - ZZZ_SUPER_SECRET (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:10) [possible owner: app.py]
+    - overrides or {} (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:41) [possible owner: app.py]
+    - Path(__file__).with_name("config.ini") (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:50) [possible owner: app.py]
+    - us-west-2 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:14) [possible owner: app.py]
+    - {DB_PASSWORD} (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:21) [possible owner: app.py]
+    - https://hooks.example.internal/notify (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:13) [possible owner: app.py]
+    - hashlib.sha256((payload + SERVICE_TOKEN).encode("utf-8")).hexdigest() (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:27) [possible owner: app.py]
+    - os.environ.get("SAMPLE_DB_HOST", "db.internal.local") (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:20) [possible owner: app.py]
+
+  password:
+    - secret="fixture-html-secret" (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/templates/index.html:10) [possible owner: index.html]
+    - API_KEY = "ZZZ_SUPER_SECRET" (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:10) [possible owner: app.py]
+    - db-pass-123 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:11) [possible owner: app.py]

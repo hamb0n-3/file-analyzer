@@ -1,0 +1,17 @@
+Directory Summary
+Files (with findings): 7  Findings: 94  Generated: 2025-09-17 11:05:45  Scope: files  Plugins: all
+
+/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project  total: 76
+  - /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py  findings: 34
+  - /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini  findings: 13
+  - /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py  findings: 15
+  - /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml  findings: 14
+
+/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/data  total: 3
+  - /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/data/sample.json  findings: 3
+
+/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/routes  total: 11
+  - /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/routes/api_routes.js  findings: 11
+
+/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/templates  total: 4
+  - /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/templates/index.html  findings: 4

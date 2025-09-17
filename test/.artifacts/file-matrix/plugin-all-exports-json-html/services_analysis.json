@@ -1,0 +1,222 @@
+{
+  "__meta__": {
+    "access_token": [
+      {
+        "column": 13,
+        "confidence": 0.6166,
+        "description": "'token' assigned to a suspicious value (entropy=4.67).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+        "fingerprint": "21da789a31e79656003893e7eea324d413bab7a22eaaf7806adaaa5fb910e555",
+        "line": 15,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "medium",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (token)",
+        "value": "os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")"
+      }
+    ],
+    "api_key": [
+      {
+        "column": 24,
+        "confidence": 0.5744,
+        "description": "'OAUTH_CLIENT_SECRET' assigned to a suspicious value (entropy=3.61).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+        "fingerprint": "45199bb4371339044cad8a221f3f1fa46046ce8dc44dcf696c0cf242d12a03a4",
+        "line": 11,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "medium",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (OAUTH_CLIENT_SECRET)",
+        "value": "oauth-client-secret-abc"
+      },
+      {
+        "column": 20,
+        "confidence": 0.5438,
+        "description": "'SERVICE_API_KEY' assigned to a suspicious value (entropy=2.85).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+        "fingerprint": "a87e2e456457ec1968650c5a55869dbca3139fe4b424e1e601ff5d205bc42235",
+        "line": 10,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "medium",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (SERVICE_API_KEY)",
+        "value": "svc-key-555"
+      },
+      {
+        "column": 15,
+        "confidence": 0.3888,
+        "description": "'base_url' assigned to a suspicious value (entropy=3.97).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+        "fingerprint": "3765305645a711685acb2e50939047b4662c49690795dada9740afebe73d3dd5",
+        "line": 26,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (base_url)",
+        "value": "str = SERVICE_ENDPOINT"
+      },
+      {
+        "column": 21,
+        "confidence": 0.3876,
+        "description": "'SERVICE_ENDPOINT' assigned to a suspicious value (entropy=3.94).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+        "fingerprint": "39c5524d8ae243f5568af6c5916a0d40e61a81e5cc531ccba1e2170fa1a99b61",
+        "line": 9,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (SERVICE_ENDPOINT)",
+        "value": "https://service.example.com"
+      },
+      {
+        "column": 14,
+        "confidence": 0.34,
+        "description": "'timeout' assigned to a suspicious value (entropy=2.75).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+        "fingerprint": "7121abbb0c1b5702f331aa1a17911b2125d83ff972ff452520caaa63e14a310d",
+        "line": 27,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (timeout)",
+        "value": "int = 10"
+      }
+    ]
+  },
+  "_api_structure": {},
+  "_metadata": {
+    "generated_by": "file-analyzer",
+    "timestamp": "2025-09-17T11:05:49.930777",
+    "version": "1.0.0"
+  },
+  "access_token": [
+    "os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")"
+  ],
+  "api_auth_scheme": [],
+  "api_doc_comment": [],
+  "api_endpoint": [],
+  "api_framework": [
+    "JavaScript framework: Jest"
+  ],
+  "api_key": [
+    "https://service.example.com",
+    "int = 10",
+    "oauth-client-secret-abc",
+    "str = SERVICE_ENDPOINT",
+    "svc-key-555"
+  ],
+  "api_key_param": [],
+  "api_method": [],
+  "api_parameter": [],
+  "api_request_examples": [],
+  "api_version": [],
+  "authorization_header": [],
+  "aws_key": [],
+  "base64_encoded": [],
+  "cloud_endpoint": [],
+  "code_complexity": [],
+  "code_quality": [],
+  "commented_code": [],
+  "content_type": [],
+  "cookie": [],
+  "credit_card": [],
+  "curl_command": [],
+  "database_connection": [],
+  "domain_keywords": [
+    "os.environ.get",
+    "self.timeout"
+  ],
+  "email": [],
+  "error_pattern": [],
+  "failed_json_request": [],
+  "file_metadata": [
+    "Accessed: 1758131150.3061883",
+    "Created: 1758131149.85321",
+    "File size: 852 bytes",
+    "Filename: services.py",
+    "Group ID: 20",
+    "Modified: 1758131149.85321",
+    "Owner ID: 501",
+    "Permissions: 33188"
+  ],
+  "firebase_url": [],
+  "form_data": [],
+  "graphql_query": [],
+  "graphql_schema": [],
+  "hash": [],
+  "high_entropy_strings": [],
+  "http_error": [],
+  "http_status_code": [],
+  "ipv4": [],
+  "ipv6": [],
+  "jwt": [],
+  "mac_address": [],
+  "ml_api_findings": [],
+  "ml_credential_findings": [],
+  "network_endpoints": [],
+  "network_hosts": [],
+  "network_ports": [],
+  "network_protocols": [
+    "HTTPS",
+    "ICMP",
+    "Network protocol: HTTPS",
+    "Network protocol: ICMP"
+  ],
+  "network_security_issues": [],
+  "oauth_flow": [],
+  "oauth_token": [],
+  "openapi_schema": [],
+  "pagination": [],
+  "password": [],
+  "path_parameter": [],
+  "private_key": [],
+  "public_key": [],
+  "query_parameter": [],
+  "rate_limit": [],
+  "rate_limit_header": [],
+  "refresh_token": [],
+  "request_body_json": [],
+  "request_header": [],
+  "rest_resource": [],
+  "runtime_errors": [],
+  "security_smells": [
+    "Hardcoded sensitive value in variable 'OAUTH_CLIENT_SECRET' at line 11",
+    "Hardcoded sensitive value in variable 'SERVICE_API_KEY' at line 10"
+  ],
+  "session_id": [],
+  "social_security": [],
+  "software_versions": [],
+  "successful_json_request": [],
+  "supabase_url": [],
+  "url": [],
+  "username": [],
+  "va_gov_domain": [],
+  "va_gov_url": [],
+  "webhook_event": [],
+  "webhook_url": [],
+  "xml_response": []
+}

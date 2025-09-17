@@ -1,0 +1,7 @@
+Directory Summary
+Files (with findings): 3  Findings: 63  Generated: 2025-09-17 11:05:43  Scope: files  Plugins: all
+
+/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project  total: 63
+  - /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py  findings: 34
+  - /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py  findings: 15
+  - /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml  findings: 14

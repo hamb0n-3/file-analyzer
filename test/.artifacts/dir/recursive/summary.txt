@@ -1,0 +1,5 @@
+Directory Summary
+Files (with findings): 1  Findings: 15  Generated: 2025-09-17 11:05:42  Scope: /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/advanced_project  Plugins: all
+
+src  total: 15
+  - src/api_client.js  findings: 15

@@ -1,0 +1,9 @@
+{
+  "service": "inventory",
+  "endpoint": "https://api.example.com/v1/inventory",
+  "token": "adv-project-api-token-123",
+  "metadata": {
+    "owner": "demo-team",
+    "severity": "high"
+  }
+}

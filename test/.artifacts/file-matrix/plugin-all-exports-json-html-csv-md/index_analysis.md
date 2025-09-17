@@ -1,0 +1,43 @@
+```
+=== File Analysis Results ===
+Run Details:
+  Generated: 2025-09-17 11:05:50
+  File: /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/templates/index.html
+  Plugins: all
+  Scan Mode: file
+
+File Metadata:
+  Accessed: 1758131225.6252565
+  Created: 1758131162.1353228
+  File size: 332 bytes
+  Filename: index.html
+  Group ID: 20
+  Modified: 1758131162.1353228
+  Owner ID: 501
+  Permissions: 33188
+
+Total Findings: 12
+
+Network Information (2 findings):
+  Domain Keywords (1 found):
+    - hooks.example.internal
+  Url (1 found):
+    - https://hooks.example.internal/notify
+
+Authentication (1 findings):
+  Password (1 found):
+    - secret="fixture-html-secret" (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/templates/index.html:10)
+
+Network (1 findings):
+  Network Protocols (1 found):
+    - HTTPS
+
+================================================================================
+WARNING DISCLAIMER:
+--------------------------------------------------------------------------------
+This analysis is based on pattern matching and heuristics, and may not be exhaustive.
+Some API endpoints, credentials, or sensitive data might not be detected.
+Successful API request examples are based on contextual clues and might be incomplete.
+For critical security analysis, always perform manual verification.
+================================================================================
+```

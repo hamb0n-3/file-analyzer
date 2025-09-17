@@ -1,0 +1,10 @@
+Category,Type,Value,Severity,File,Line,Possible Owner
+File Metadata,file_metadata,Accessed: 1758131225.6252565,Low,,,
+File Metadata,file_metadata,Created: 1758131162.1353228,Low,,,
+File Metadata,file_metadata,File size: 332 bytes,Low,,,
+File Metadata,file_metadata,Filename: index.html,Low,,,
+File Metadata,file_metadata,Group ID: 20,Low,,,
+File Metadata,file_metadata,Modified: 1758131162.1353228,Low,,,
+File Metadata,file_metadata,Owner ID: 501,Low,,,
+File Metadata,file_metadata,Permissions: 33188,Low,,,
+Password,password,"secret=""fixture-html-secret""",High,,,

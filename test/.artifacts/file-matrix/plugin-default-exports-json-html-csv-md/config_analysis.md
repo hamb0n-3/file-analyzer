@@ -1,0 +1,55 @@
+```
+=== File Analysis Results ===
+Run Details:
+  Generated: 2025-09-17 11:05:46
+  File: /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini
+  Plugins: all
+  Scan Mode: file
+
+File Metadata:
+  Accessed: 1758131160.200531
+  Created: 1758131158.977397
+  File size: 318 bytes
+  Filename: config.ini
+  Group ID: 20
+  Modified: 1758131158.977397
+  Owner ID: 501
+  Permissions: 33188
+
+Total Findings: 21
+
+Network Information (4 findings):
+  Domain Keywords (2 found):
+    - db.internal.local
+    - hooks.example.internal
+  Url (2 found):
+    - https://hooks.example.internal/notify
+    - postgresql://sample:db-pass-123@db.internal.local:5432 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:11)
+
+Authentication (1 findings):
+  Access Token (1 found):
+    - fixture-refresh-token (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:8)
+
+API & Keys (7 findings):
+  Api Key (7 found):
+    - us-west-2 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:3)
+    - db-pass-123 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:11)
+    - sample-project (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:2)
+    - fixture-client-id (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:6)
+    - fixture-client-secret (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:7)
+    - https://hooks.example.internal/notify (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:15)
+    - postgresql://sample:db-pass-123@db.internal.local:5432/sample (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:11)
+
+Network (1 findings):
+  Network Protocols (1 found):
+    - HTTPS
+
+================================================================================
+WARNING DISCLAIMER:
+--------------------------------------------------------------------------------
+This analysis is based on pattern matching and heuristics, and may not be exhaustive.
+Some API endpoints, credentials, or sensitive data might not be detected.
+Successful API request examples are based on contextual clues and might be incomplete.
+For critical security analysis, always perform manual verification.
+================================================================================
+```

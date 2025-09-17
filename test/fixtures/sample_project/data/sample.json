@@ -1,0 +1,18 @@
+{
+  "users": [
+    {
+      "name": "Ada",
+      "key": "user-key-AAA111",
+      "roles": ["admin", "maintainer"]
+    },
+    {
+      "name": "Grace",
+      "key": "user-key-BBB222",
+      "roles": ["viewer"]
+    }
+  ],
+  "service": {
+    "url": "https://api.example.com/v2",
+    "token": "json-token-fixture"
+  }
+}

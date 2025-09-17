@@ -1,0 +1,36 @@
+{
+  "_metadata": {
+    "generated_by": "file-analyzer",
+    "timestamp": "2025-09-17T11:05:47.698438",
+    "version": "1.0.0"
+  },
+  "access_token": [],
+  "api_key": [],
+  "aws_key": [],
+  "base64_encoded": [],
+  "cookie": [],
+  "credit_card": [],
+  "database_connection": [],
+  "email": [],
+  "file_metadata": [
+    "Accessed: 1758131225.625265",
+    "Created: 1758131167.8080442",
+    "File size: 314 bytes",
+    "Filename: sample.json",
+    "Group ID: 20",
+    "Modified: 1758131167.8080442",
+    "Owner ID: 501",
+    "Permissions: 33188"
+  ],
+  "high_entropy_strings": [],
+  "jwt": [],
+  "oauth_token": [],
+  "password": [],
+  "private_key": [],
+  "refresh_token": [],
+  "runtime_errors": [],
+  "session_id": [],
+  "social_security": [],
+  "username": [],
+  "xml_response": []
+}

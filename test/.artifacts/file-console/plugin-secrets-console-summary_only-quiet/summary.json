@@ -1,0 +1,22 @@
+{
+  "summary": {
+    "total_files": 3,
+    "total_findings": 24
+  },
+  "directories": {
+    "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project": [
+      {
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+        "total_findings": 6
+      },
+      {
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "total_findings": 12
+      },
+      {
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+        "total_findings": 6
+      }
+    ]
+  }
+}

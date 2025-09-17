@@ -1,0 +1,21 @@
+service:
+  endpoint: "https://api.example.com/v2"
+  auth_token: "yaml-secret-456"
+  retries: 3
+  timeouts:
+    connect: 5
+    read: 30
+
+logging:
+  level: INFO
+  destinations:
+    - stdout
+    - file
+
+notifications:
+  slack_webhook: "https://hooks.slack.com/services/T000/B000/fixture123"
+  email: "alerts@example.com"
+
+secrets:
+  vault_path: "kv/projects/sample"
+  fallback_key: "backup-token-987"

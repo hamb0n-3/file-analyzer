@@ -1,0 +1,45 @@
+Aggregated Plugin Findings
+==========================
+Generated: 2025-09-17 11:05:47
+Plugin selection: secrets
+
+[secrets]
+Total findings: 30
+  access_token:
+    - hardcoded-token (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:12) [possible owner: app.py]
+    - os.environ.get("SERVICE_API_SECRET", "fixture-service-secret") (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:15) [possible owner: services.py]
+    - yaml-secret-456 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:3) [possible owner: settings.yaml]
+    - fixture-refresh-token (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:8) [possible owner: config.ini]
+
+  api_key:
+    - Dict[str, bool] = { (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:34) [possible owner: app.py]
+    - ZZZ_SUPER_SECRET (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:10) [possible owner: app.py]
+    - overrides or {} (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:41) [possible owner: app.py]
+    - Path(__file__).with_name("config.ini") (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:50) [possible owner: app.py]
+    - us-west-2 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:14) [possible owner: app.py]
+    - {DB_PASSWORD} (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:21) [possible owner: app.py]
+    - https://hooks.example.internal/notify (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:13) [possible owner: app.py]
+    - hashlib.sha256((payload + SERVICE_TOKEN).encode("utf-8")).hexdigest() (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:27) [possible owner: app.py]
+    - os.environ.get("SAMPLE_DB_HOST", "db.internal.local") (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:20) [possible owner: app.py]
+    - oauth-client-secret-abc (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:11) [possible owner: services.py]
+    - str = SERVICE_ENDPOINT (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:26) [possible owner: services.py]
+    - svc-key-555 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:10) [possible owner: services.py]
+    - int = 10 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:27) [possible owner: services.py]
+    - https://service.example.com (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:9) [possible owner: .example.com]
+    - alerts@example.com (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:17) [possible owner: example.com]
+    - backup-token-987 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:21) [possible owner: settings.yaml]
+    - https://api.example.com/v2 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:2) [possible owner: settings.yaml]
+    - https://hooks.slack.com/services/T000/B000/fixture123 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:16) [possible owner: example.com]
+    - kv/projects/sample (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:20) [possible owner: example.com]
+    - db-pass-123 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:11) [possible owner: db.internal.local]
+    - sample-project (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:2) [possible owner: config.ini]
+    - postgresql://sample:db-pass-123@db.internal.local:5432/sample (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:11) [possible owner: db.internal.local]
+    - us-west-2 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:3) [possible owner: config.ini]
+    - fixture-client-secret (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:7) [possible owner: config.ini]
+    - https://hooks.example.internal/notify (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:15) [possible owner: config.ini]
+    - fixture-client-id (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:6) [possible owner: config.ini]
+
+  password:
+    - API_KEY = "ZZZ_SUPER_SECRET" (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:10) [possible owner: app.py]
+    - db-pass-123 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:11) [possible owner: app.py]
+    - secret="fixture-html-secret" (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/templates/index.html:10) [possible owner: index.html]

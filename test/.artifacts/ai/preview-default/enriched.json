@@ -1,0 +1,198 @@
+{
+  "version": "1.0",
+  "plugin": "SecretsContextPlugin",
+  "generated_at": "2025-09-17T18:05:42Z",
+  "inputs": {
+    "manifest_path": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/manifest.json"
+  },
+  "results": [
+    {
+      "id": "secret-1",
+      "source_file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+      "language": "python",
+      "secret_value": "ZZZ_SUPER_SECRET",
+      "secret_length": 16,
+      "secret_entropy": 3.031,
+      "occurrences": [
+        {
+          "line": 10,
+          "column": 12
+        }
+      ],
+      "context_snippet": "    6: import os\n    7: from pathlib import Path\n    8: from typing import Dict, Optional\n    9: \n   10: API_KEY = \"ZZZ_SUPER_SECRET\"\n   11: DB_PASSWORD = \"db-pass-123\"\n   12: SERVICE_TOKEN = \"hardcoded-token\"\n   13: INTERNAL_WEBHOOK = \"https://hooks.example.internal/notify\"\n   14: DEFAULT_REGION = \"us-west-2\"",
+      "var_name": "API_KEY"
+    },
+    {
+      "id": "secret-2",
+      "source_file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+      "language": "python",
+      "secret_value": "hardcoded-token",
+      "secret_length": 15,
+      "secret_entropy": 3.323,
+      "occurrences": [
+        {
+          "line": 12,
+          "column": 18
+        }
+      ],
+      "context_snippet": "    8: from typing import Dict, Optional\n    9: \n   10: API_KEY = \"ZZZ_SUPER_SECRET\"\n   11: DB_PASSWORD = \"db-pass-123\"\n   12: SERVICE_TOKEN = \"hardcoded-token\"\n   13: INTERNAL_WEBHOOK = \"https://hooks.example.internal/notify\"\n   14: DEFAULT_REGION = \"us-west-2\"\n   15: \n   16: ",
+      "var_name": "token"
+    },
+    {
+      "id": "secret-3",
+      "source_file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+      "language": "yaml",
+      "secret_value": "yaml-secret-456",
+      "secret_length": 15,
+      "secret_entropy": 3.64,
+      "occurrences": [
+        {
+          "line": 3,
+          "column": 16
+        }
+      ],
+      "context_snippet": "    1: service:\n    2:   endpoint: \"https://api.example.com/v2\"\n    3:   auth_token: \"yaml-secret-456\"\n    4:   retries: 3\n    5:   timeouts:\n    6:     connect: 5\n    7:     read: 30",
+      "var_name": null
+    },
+    {
+      "id": "secret-4",
+      "source_file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+      "language": "python",
+      "secret_value": "svc-key-555",
+      "secret_length": 11,
+      "secret_entropy": 2.845,
+      "occurrences": [
+        {
+          "line": 10,
+          "column": 20
+        }
+      ],
+      "context_snippet": "    6: from dataclasses import dataclass\n    7: from typing import Dict\n    8: \n    9: SERVICE_ENDPOINT = \"https://service.example.com\"\n   10: SERVICE_API_KEY = \"svc-key-555\"\n   11: OAUTH_CLIENT_SECRET = \"oauth-client-secret-abc\"\n   12: \n   13: \n   14: def build_headers() -> Dict[str, str]:",
+      "var_name": "service api key"
+    },
+    {
+      "id": "secret-5",
+      "source_file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py",
+      "language": "python",
+      "secret_value": "oauth-client-secret-abc",
+      "secret_length": 23,
+      "secret_entropy": 3.61,
+      "occurrences": [
+        {
+          "line": 11,
+          "column": 24
+        }
+      ],
+      "context_snippet": "    7: from typing import Dict\n    8: \n    9: SERVICE_ENDPOINT = \"https://service.example.com\"\n   10: SERVICE_API_KEY = \"svc-key-555\"\n   11: OAUTH_CLIENT_SECRET = \"oauth-client-secret-abc\"\n   12: \n   13: \n   14: def build_headers() -> Dict[str, str]:\n   15:     token = os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")",
+      "var_name": "oauth client"
+    },
+    {
+      "id": "secret-6",
+      "source_file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/routes/api_routes.js",
+      "language": "javascript",
+      "secret_value": "whsec_fixture_secret",
+      "secret_length": 20,
+      "secret_entropy": 3.422,
+      "occurrences": [
+        {
+          "line": 5,
+          "column": 25
+        }
+      ],
+      "context_snippet": "    1: const express = require('express');\n    2: const router = express.Router();\n    3: \n    4: const API_TOKEN = 'js-token-XYZ';\n    5: const WEBHOOK_SECRET = 'whsec_fixture_secret';\n    6: \n    7: router.get('/health', (_req, res) => {\n    8:   res.json({ status: 'ok', tokenPreview: API_TOKEN.slice(0, 4) });\n    9: });",
+      "var_name": "webhook"
+    },
+    {
+      "id": "secret-7",
+      "source_file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/data/sample.json",
+      "language": "json",
+      "secret_value": "json-token-fixture",
+      "secret_length": 18,
+      "secret_entropy": 3.614,
+      "occurrences": [
+        {
+          "line": 16,
+          "column": 15
+        }
+      ],
+      "context_snippet": "   12:     }\n   13:   ],\n   14:   \"service\": {\n   15:     \"url\": \"https://api.example.com/v2\",\n   16:     \"token\": \"json-token-fixture\"\n   17:   }\n   18: }",
+      "var_name": "token"
+    },
+    {
+      "id": "secret-8",
+      "source_file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/templates/index.html",
+      "language": "text",
+      "secret_value": "fixture-html-secret",
+      "secret_length": 19,
+      "secret_entropy": 3.537,
+      "occurrences": [
+        {
+          "line": 10,
+          "column": 21
+        }
+      ],
+      "context_snippet": "    6:   </head>\n    7:   <body>\n    8:     <h1>Sample Application</h1>\n    9:     <p>Webhook endpoint: https://hooks.example.internal/notify</p>\n   10:     <p data-secret=\"fixture-html-secret\">Sensitive placeholder rendered here.</p>\n   11:   </body>\n   12: </html>",
+      "var_name": "html data"
+    },
+    {
+      "id": "secret-9",
+      "source_file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/.env",
+      "language": "text",
+      "secret_value": "fixture-service-secret",
+      "secret_length": 22,
+      "secret_entropy": 3.261,
+      "occurrences": [
+        {
+          "line": 2,
+          "column": 20
+        }
+      ],
+      "context_snippet": "    1: AUTH_TOKEN=env-secret-789\n    2: SERVICE_API_SECRET=fixture-service-secret\n    3: DB_USER=fixture_user\n    4: DB_PASS=fixture-password-321",
+      "var_name": "env"
+    },
+    {
+      "id": "secret-10",
+      "source_file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+      "language": "ini",
+      "secret_value": "fixture-client-secret",
+      "secret_length": 21,
+      "secret_entropy": 3.404,
+      "occurrences": [
+        {
+          "line": 7,
+          "column": 17
+        }
+      ],
+      "context_snippet": "    3: region = us-west-2\n    4: \n    5: [auth]\n    6: client_id = fixture-client-id\n    7: client_secret = fixture-client-secret\n    8: refresh_token = fixture-refresh-token\n    9: \n   10: [database]\n   11: uri = postgresql://sample:db-pass-123@db.internal.local:5432/sample",
+      "var_name": "client secret"
+    },
+    {
+      "id": "secret-11",
+      "source_file": "s3:/mock-bucket/example.txt",
+      "language": "text",
+      "secret_value": "remote-secret",
+      "secret_length": 13,
+      "secret_entropy": 2.777,
+      "occurrences": [],
+      "context_snippet": "",
+      "var_name": "remote"
+    }
+  ],
+  "statistics": {
+    "total_secrets": 11,
+    "processed": 11,
+    "failures": 0,
+    "llm_attempts": 11,
+    "llm_successes": 0,
+    "llm_failures": 11,
+    "llm_skipped": 0,
+    "duration_seconds": 0.044,
+    "llm_total_seconds": 0.038,
+    "file_cache_hits": 2,
+    "file_cache_misses": 8,
+    "cached_files": 8,
+    "secrets_per_second": 252.59,
+    "llm_avg_seconds": 0.003,
+    "llm_max_seconds": 0.038
+  }
+}

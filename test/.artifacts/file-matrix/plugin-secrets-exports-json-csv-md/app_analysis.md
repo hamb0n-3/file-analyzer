@@ -1,0 +1,48 @@
+```
+=== File Analysis Results ===
+Run Details:
+  Generated: 2025-09-17 11:05:47
+  File: /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py
+  Plugins: secrets
+  Scan Mode: file
+
+File Metadata:
+  Accessed: 1758131131.1394048
+  Created: 1758131130.781706
+  File size: 1606 bytes
+  Filename: app.py
+  Group ID: 20
+  Modified: 1758131130.781706
+  Owner ID: 501
+  Permissions: 33188
+
+Total Findings: 20
+
+Authentication (3 findings):
+  Password (2 found):
+    - db-pass-123
+    - API_KEY = "ZZZ_SUPER_SECRET"
+  Access Token (1 found):
+    - hardcoded-token
+
+API & Keys (9 findings):
+  Api Key (9 found):
+    - us-west-2
+    - {DB_PASSWORD}
+    - overrides or {}
+    - ZZZ_SUPER_SECRET
+    - Dict[str, bool] = {
+    - https://hooks.example.internal/notify
+    - Path(__file__).with_name("config.ini")
+    - os.environ.get("SAMPLE_DB_HOST", "db.internal.local")
+    - hashlib.sha256((payload + SERVICE_TOKEN).encode("utf-8")).hexdigest()
+
+================================================================================
+WARNING DISCLAIMER:
+--------------------------------------------------------------------------------
+This analysis is based on pattern matching and heuristics, and may not be exhaustive.
+Some API endpoints, credentials, or sensitive data might not be detected.
+Successful API request examples are based on contextual clues and might be incomplete.
+For critical security analysis, always perform manual verification.
+================================================================================
+```

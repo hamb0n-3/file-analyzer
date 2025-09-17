@@ -1,0 +1,19 @@
+{
+  "secrets": [
+    {
+      "file": "test/fixtures/advanced_project/src/helper.py",
+      "value": "adv-helper-token-xyz",
+      "hint": "python"
+    },
+    {
+      "file": "test/fixtures/advanced_project/src/nested/secrets.txt",
+      "value": "pk_live_51JadFakeKeyForFixture",
+      "hint": "stripe"
+    },
+    {
+      "file": "https://example.invalid/remote.json",
+      "value": "REMOTE_ADV_SECRET",
+      "hint": "remote"
+    }
+  ]
+}

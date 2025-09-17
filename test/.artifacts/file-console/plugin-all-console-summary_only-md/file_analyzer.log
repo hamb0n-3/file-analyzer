@@ -1,0 +1,5 @@
+2025-09-17 11:04:01,072 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 11:04:01,072 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 11:04:01,073 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 11:04:01,089 - INFO - root - Radon not available, skipping complexity analysis
+2025-09-17 11:04:01,090 - INFO - root - Radon not available, skipping complexity analysis

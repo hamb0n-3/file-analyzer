@@ -1,0 +1,62 @@
+=== File Analysis Results ===
+Run Details:
+  Generated: 2025-09-17 11:05:44
+  File: /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml
+  Plugins: all
+  Scan Mode: file
+
+File Metadata:
+  Accessed: 1758131137.9378383
+  Created: 1758131137.6121604
+  File size: 398 bytes
+  Filename: settings.yaml
+  Group ID: 20
+  Modified: 1758131137.6121604
+  Owner ID: 501
+  Permissions: 33188
+
+Total Findings: 22
+
+Network Information (2 findings):
+  Domain Keywords (1 found):
+    - hooks.slack.com
+  Url (1 found):
+    - https://hooks.slack.com/services/T000/B000/fixture123
+
+Authentication (1 findings):
+  Access Token (1 found):
+    - yaml-secret-456 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:3)
+
+API & Keys (5 findings):
+  Api Key (5 found):
+    - backup-token-987 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:21)
+    - alerts@example.com (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:17)
+    - kv/projects/sample (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:20)
+    - https://api.example.com/v2 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:2)
+    - https://hooks.slack.com/services/T000/B000/fixture123 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:16)
+
+API Information (5 findings):
+  Webhook Url (1 found):
+    - webhook: "https://hooks.slack.com/services/T000/B000/fixture123"
+  Request Header (4 found):
+    - logging:
+  level: INFO
+    - secrets:
+  vault_path: "kv/projects/sample"
+    - service:
+  endpoint: "https://api.example.com/v2"
+    - notifications:
+  slack_webhook: "https://hooks.slack.com/services/T000/B000/fixture123"
+
+Network (1 findings):
+  Network Protocols (1 found):
+    - HTTPS
+
+================================================================================
+WARNING DISCLAIMER:
+--------------------------------------------------------------------------------
+This analysis is based on pattern matching and heuristics, and may not be exhaustive.
+Some API endpoints, credentials, or sensitive data might not be detected.
+Successful API request examples are based on contextual clues and might be incomplete.
+For critical security analysis, always perform manual verification.
+================================================================================

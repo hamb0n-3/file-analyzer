@@ -1,0 +1,368 @@
+{
+  "__meta__": {
+    "access_token": [
+      {
+        "column": 18,
+        "confidence": 0.5629,
+        "description": "'SERVICE_TOKEN' assigned to a suspicious value (entropy=3.32).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "81e0f00a517e02ff854b26182c4532d6b6b4200a6dd63e51716c4e3d1a5f5966",
+        "line": 12,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "medium",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (SERVICE_TOKEN)",
+        "value": "hardcoded-token"
+      }
+    ],
+    "api_key": [
+      {
+        "column": 14,
+        "confidence": 0.6,
+        "description": "URI or connection string contains embedded credentials.",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "be045b333e31478e3618c8b9214af590665f56081135c4153a61b62d6e63e78b",
+        "line": 21,
+        "rule_id": "CONNECTION_STRING",
+        "severity": "high",
+        "tags": [
+          "db",
+          "uri",
+          "connection"
+        ],
+        "title": "Connection string with credentials",
+        "value": "{DB_PASSWORD}"
+      },
+      {
+        "column": 12,
+        "confidence": 0.5512,
+        "description": "'API_KEY' assigned to a suspicious value (entropy=3.03).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "f0e97c7ac513337cc39ee4443971ad7f6656cb4cef3a0d1c96ed1cb46b31307f",
+        "line": 10,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "medium",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (API_KEY)",
+        "value": "ZZZ_SUPER_SECRET"
+      },
+      {
+        "column": 14,
+        "confidence": 0.4332,
+        "description": "'digest' assigned to a suspicious value (entropy=5.08).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "8257762516d920722ba77f5dc2299ddc47d0c5d523e4b0b0388427f3608a4695",
+        "line": 27,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (digest)",
+        "value": "hashlib.sha256((payload + SERVICE_TOKEN).encode(\"utf-8\")).hexdigest()"
+      },
+      {
+        "column": 12,
+        "confidence": 0.4212,
+        "description": "'host' assigned to a suspicious value (entropy=4.78).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "db5a6d109e1a0967e238a2fbe2a6ea5c8df743430ece7c456e8cdf83a4824b67",
+        "line": 20,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (host)",
+        "value": "os.environ.get(\"SAMPLE_DB_HOST\", \"db.internal.local\")"
+      },
+      {
+        "column": 21,
+        "confidence": 0.394,
+        "description": "'INTERNAL_WEBHOOK' assigned to a suspicious value (entropy=4.10).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "846d9ad238c354b50ac74dd24f860fcd4a3dc35097ae73296a56768fe4ed0396",
+        "line": 13,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (INTERNAL_WEBHOOK)",
+        "value": "https://hooks.example.internal/notify"
+      },
+      {
+        "column": 21,
+        "confidence": 0.3915,
+        "description": "'manifest_path' assigned to a suspicious value (entropy=4.04).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "b55f47388d344e091d249a5439ddd7053282cda38ff65c089b34c79b2774c3b2",
+        "line": 50,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (manifest_path)",
+        "value": "Path(__file__).with_name(\"config.ini\")"
+      },
+      {
+        "column": 15,
+        "confidence": 0.3815,
+        "description": "'DEFAULTS' assigned to a suspicious value (entropy=3.79).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "f84a6ff690489ed4e75c84be7e963972f07ce352fe3ae08983169aa72bd0aa52",
+        "line": 34,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (DEFAULTS)",
+        "value": "Dict[str, bool] = {"
+      },
+      {
+        "column": 26,
+        "confidence": 0.3576,
+        "description": "'self.overrides' assigned to a suspicious value (entropy=3.19).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "6c911c2c24b3ec5fcaad3615e648298764cbab4a953ed24452de67c03e5df284",
+        "line": 41,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (self.overrides)",
+        "value": "overrides or {}"
+      },
+      {
+        "column": 19,
+        "confidence": 0.339,
+        "description": "'DEFAULT_REGION' assigned to a suspicious value (entropy=2.73).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "f024766000c6adc2861b3de1ee91b9f8f1edd40bd6e458eff770fb7bb6926688",
+        "line": 14,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (DEFAULT_REGION)",
+        "value": "us-west-2"
+      }
+    ],
+    "password": [
+      {
+        "column": 16,
+        "confidence": 0.5538,
+        "description": "'DB_PASSWORD' assigned to a suspicious value (entropy=3.10).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "c25dda180e74d13b79f6d5d06253ca2b0189d57fc079314a6de9b7a6fa7fc23a",
+        "line": 11,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "medium",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (DB_PASSWORD)",
+        "value": "db-pass-123"
+      },
+      {
+        "column": 1,
+        "confidence": 0.5,
+        "description": "Suspicious credential assignment in code/config.",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "ec7a9631266c9c9af40bbc541884de2886ca9237e786c638ff6bdd1c8cdaf621",
+        "line": 10,
+        "rule_id": "GENERIC_PASSWORD_ASSIGN",
+        "severity": "medium",
+        "tags": [
+          "generic",
+          "assignment"
+        ],
+        "title": "Password-like assignment",
+        "value": "API_KEY = \"ZZZ_SUPER_SECRET\""
+      }
+    ],
+    "url": [
+      {
+        "column": 14,
+        "confidence": 0.5,
+        "description": "URL contains username:password@host.",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py",
+        "fingerprint": "f7f7bd144c24f8474d395f3b77ddd1dfcbd6ca58b476ae4ae66a445d5fd230da",
+        "line": 21,
+        "rule_id": "BASIC_AUTH_IN_URL",
+        "severity": "high",
+        "tags": [
+          "url",
+          "basic-auth"
+        ],
+        "title": "URL with embedded credentials",
+        "value": "postgresql://{user}:{DB_PASSWORD}@{host}:5432"
+      }
+    ]
+  },
+  "_api_structure": {},
+  "_metadata": {
+    "generated_by": "file-analyzer",
+    "timestamp": "2025-09-17T11:05:45.866309",
+    "version": "1.0.0"
+  },
+  "access_token": [
+    "hardcoded-token"
+  ],
+  "api_auth_scheme": [],
+  "api_doc_comment": [],
+  "api_endpoint": [],
+  "api_framework": [
+    "JavaScript framework: TypeScript"
+  ],
+  "api_key": [
+    "Dict[str, bool] = {",
+    "Path(__file__).with_name(\"config.ini\")",
+    "ZZZ_SUPER_SECRET",
+    "hashlib.sha256((payload + SERVICE_TOKEN).encode(\"utf-8\")).hexdigest()",
+    "https://hooks.example.internal/notify",
+    "os.environ.get(\"SAMPLE_DB_HOST\", \"db.internal.local\")",
+    "overrides or {}",
+    "us-west-2",
+    "{DB_PASSWORD}"
+  ],
+  "api_key_param": [],
+  "api_method": [],
+  "api_parameter": [],
+  "api_request_examples": [],
+  "api_version": [],
+  "authorization_header": [],
+  "aws_key": [],
+  "base64_encoded": [],
+  "cloud_endpoint": [],
+  "code_complexity": [
+    "Complex regex pattern at line 13"
+  ],
+  "code_quality": [
+    "Low maintainability index: 56.01/100"
+  ],
+  "commented_code": [
+    "Commented code at line 13",
+    "Commented code at line 21"
+  ],
+  "content_type": [],
+  "cookie": [],
+  "credit_card": [],
+  "curl_command": [],
+  "database_connection": [],
+  "domain_keywords": [
+    "config.ini",
+    "db.internal.local",
+    "hooks.example.internal",
+    "os.environ.get",
+    "self.DEFAULTS.get",
+    "self.overrides",
+    "self.overrides.get"
+  ],
+  "email": [],
+  "error_pattern": [],
+  "failed_json_request": [],
+  "file_metadata": [
+    "Accessed: 1758131131.1394048",
+    "Created: 1758131130.781706",
+    "File size: 1606 bytes",
+    "Filename: app.py",
+    "Group ID: 20",
+    "Modified: 1758131130.781706",
+    "Owner ID: 501",
+    "Permissions: 33188"
+  ],
+  "firebase_url": [],
+  "form_data": [],
+  "graphql_query": [],
+  "graphql_schema": [],
+  "hash": [],
+  "high_entropy_strings": [],
+  "http_error": [],
+  "http_status_code": [],
+  "ipv4": [],
+  "ipv6": [],
+  "jwt": [],
+  "mac_address": [],
+  "ml_api_findings": [],
+  "ml_credential_findings": [],
+  "network_endpoints": [],
+  "network_hosts": [],
+  "network_ports": [],
+  "network_protocols": [
+    "HTTPS",
+    "ICMP",
+    "Network protocol: HTTPS",
+    "Network protocol: ICMP"
+  ],
+  "network_security_issues": [],
+  "oauth_flow": [],
+  "oauth_token": [],
+  "openapi_schema": [],
+  "pagination": [],
+  "password": [
+    "API_KEY = \"ZZZ_SUPER_SECRET\"",
+    "db-pass-123"
+  ],
+  "path_parameter": [
+    "/{user}"
+  ],
+  "private_key": [],
+  "public_key": [],
+  "query_parameter": [],
+  "rate_limit": [],
+  "rate_limit_header": [],
+  "refresh_token": [],
+  "request_body_json": [],
+  "request_header": [],
+  "rest_resource": [],
+  "runtime_errors": [],
+  "security_smells": [
+    "Hardcoded sensitive value in variable 'API_KEY' at line 10",
+    "Hardcoded sensitive value in variable 'DB_PASSWORD' at line 11",
+    "Hardcoded sensitive value in variable 'SERVICE_TOKEN' at line 12"
+  ],
+  "session_id": [],
+  "social_security": [],
+  "software_versions": [],
+  "successful_json_request": [],
+  "supabase_url": [],
+  "url": [
+    "https://hooks.example.internal/notify",
+    "postgresql://{user}:{DB_PASSWORD}@{host}:5432"
+  ],
+  "username": [],
+  "va_gov_domain": [],
+  "va_gov_url": [],
+  "webhook_event": [],
+  "webhook_url": [],
+  "xml_response": []
+}

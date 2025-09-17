@@ -1,0 +1,12 @@
+{
+  "version": "1.0",
+  "plugin": "Dummy",
+  "generated_at": "2024-01-01T00:00:00Z",
+  "inputs": {
+    "manifest_path": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/manifest.json"
+  },
+  "results": [],
+  "statistics": {
+    "total_secrets": 0
+  }
+}

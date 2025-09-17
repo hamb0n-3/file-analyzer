@@ -1,0 +1,222 @@
+{
+  "__meta__": {
+    "access_token": [
+      {
+        "column": 16,
+        "confidence": 0.5756,
+        "description": "'auth_token' assigned to a suspicious value (entropy=3.64).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+        "fingerprint": "226bdc4655d9a57c7689dd53bfc84ae68f86f506f50ef07646fc46dae6629c05",
+        "line": 3,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "medium",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (auth_token)",
+        "value": "yaml-secret-456"
+      }
+    ],
+    "api_key": [
+      {
+        "column": 19,
+        "confidence": 0.405,
+        "description": "'slack_webhook' assigned to a suspicious value (entropy=4.38).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+        "fingerprint": "f81542cbfc89fe2a68a80071dabd3a20a6979e091661a46ca3c044f7d3c58b3f",
+        "line": 16,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (slack_webhook)",
+        "value": "https://hooks.slack.com/services/T000/B000/fixture123"
+      },
+      {
+        "column": 14,
+        "confidence": 0.388,
+        "description": "'endpoint' assigned to a suspicious value (entropy=3.95).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+        "fingerprint": "73849ba43fbfe7cacff9e262ba136a81ce9c26527a754db7abd05fa5b16daec5",
+        "line": 2,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (endpoint)",
+        "value": "https://api.example.com/v2"
+      },
+      {
+        "column": 18,
+        "confidence": 0.38,
+        "description": "'fallback_key' assigned to a suspicious value (entropy=3.75).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+        "fingerprint": "3fd3e4d4d1ec72fbbbf28136b5ed0094242f8ca64486a9065d04357732a1c4de",
+        "line": 21,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (fallback_key)",
+        "value": "backup-token-987"
+      },
+      {
+        "column": 16,
+        "confidence": 0.379,
+        "description": "'vault_path' assigned to a suspicious value (entropy=3.73).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+        "fingerprint": "11fc28f91c470148d40d6a6e57522b75b3eab03979654d0d35d74a2b3672180a",
+        "line": 20,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (vault_path)",
+        "value": "kv/projects/sample"
+      },
+      {
+        "column": 11,
+        "confidence": 0.3729,
+        "description": "'email' assigned to a suspicious value (entropy=3.57).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml",
+        "fingerprint": "dd3ca24aea12e2f6baa5c24c6168d484377e90f48e608ac07c05f418edc5dc04",
+        "line": 17,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (email)",
+        "value": "alerts@example.com"
+      }
+    ]
+  },
+  "_api_structure": {},
+  "_metadata": {
+    "generated_by": "file-analyzer",
+    "timestamp": "2025-09-17T11:05:45.864891",
+    "version": "1.0.0"
+  },
+  "access_token": [
+    "yaml-secret-456"
+  ],
+  "api_auth_scheme": [],
+  "api_doc_comment": [],
+  "api_endpoint": [],
+  "api_framework": [],
+  "api_key": [
+    "alerts@example.com",
+    "backup-token-987",
+    "https://api.example.com/v2",
+    "https://hooks.slack.com/services/T000/B000/fixture123",
+    "kv/projects/sample"
+  ],
+  "api_key_param": [],
+  "api_method": [],
+  "api_parameter": [],
+  "api_request_examples": [],
+  "api_version": [],
+  "authorization_header": [],
+  "aws_key": [],
+  "base64_encoded": [],
+  "cloud_endpoint": [],
+  "code_complexity": [],
+  "code_quality": [],
+  "commented_code": [],
+  "content_type": [],
+  "cookie": [],
+  "credit_card": [],
+  "curl_command": [],
+  "database_connection": [],
+  "domain_keywords": [
+    "hooks.slack.com"
+  ],
+  "email": [],
+  "error_pattern": [],
+  "failed_json_request": [],
+  "file_metadata": [
+    "Accessed: 1758131137.9378383",
+    "Created: 1758131137.6121604",
+    "File size: 398 bytes",
+    "Filename: settings.yaml",
+    "Group ID: 20",
+    "Modified: 1758131137.6121604",
+    "Owner ID: 501",
+    "Permissions: 33188"
+  ],
+  "firebase_url": [],
+  "form_data": [],
+  "graphql_query": [],
+  "graphql_schema": [],
+  "hash": [],
+  "high_entropy_strings": [],
+  "http_error": [],
+  "http_status_code": [],
+  "ipv4": [],
+  "ipv6": [],
+  "jwt": [],
+  "mac_address": [],
+  "ml_api_findings": [],
+  "ml_credential_findings": [],
+  "network_endpoints": [],
+  "network_hosts": [],
+  "network_ports": [],
+  "network_protocols": [
+    "HTTPS"
+  ],
+  "network_security_issues": [],
+  "oauth_flow": [],
+  "oauth_token": [],
+  "openapi_schema": [],
+  "pagination": [],
+  "password": [],
+  "path_parameter": [],
+  "private_key": [],
+  "public_key": [],
+  "query_parameter": [],
+  "rate_limit": [],
+  "rate_limit_header": [],
+  "refresh_token": [],
+  "request_body_json": [],
+  "request_header": [
+    "logging:\n  level: INFO",
+    "notifications:\n  slack_webhook: \"https://hooks.slack.com/services/T000/B000/fixture123\"",
+    "secrets:\n  vault_path: \"kv/projects/sample\"",
+    "service:\n  endpoint: \"https://api.example.com/v2\""
+  ],
+  "rest_resource": [],
+  "runtime_errors": [],
+  "security_smells": [],
+  "session_id": [],
+  "social_security": [],
+  "software_versions": [],
+  "successful_json_request": [],
+  "supabase_url": [],
+  "url": [
+    "https://hooks.slack.com/services/T000/B000/fixture123"
+  ],
+  "username": [],
+  "va_gov_domain": [],
+  "va_gov_url": [],
+  "webhook_event": [],
+  "webhook_url": [
+    "webhook: \"https://hooks.slack.com/services/T000/B000/fixture123\""
+  ],
+  "xml_response": []
+}

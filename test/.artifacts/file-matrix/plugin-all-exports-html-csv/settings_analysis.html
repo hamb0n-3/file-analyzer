@@ -1,0 +1,339 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>File Analysis Report</title>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            body { 
+                font-family: 'Segoe UI', Arial, sans-serif; 
+                margin: 0; 
+                padding: 0;
+                color: #333;
+                background-color: #f8f9fa;
+            }
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+            }
+            header {
+                background-color: #343a40;
+                color: white;
+                padding: 20px;
+                margin-bottom: 20px;
+                border-radius: 5px;
+            }
+            h1, h2, h3 { margin-top: 0; }
+            .summary {
+                background-color: white;
+                padding: 20px;
+                border-radius: 5px;
+                box-shadow: 0 1px 3px rgba(0,0,0,.1);
+                margin-bottom: 20px;
+            }
+            .metadata {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+                gap: 10px;
+            }
+            .metadata-item {
+                padding: 5px;
+                border-bottom: 1px solid #eee;
+            }
+            .category { 
+                background-color: white;
+                margin-top: 20px; 
+                border-radius: 5px;
+                padding: 20px;
+                box-shadow: 0 1px 3px rgba(0,0,0,.1);
+            }
+            .category h2 {
+                border-bottom: 2px solid #007bff;
+                padding-bottom: 10px;
+                color: #007bff;
+            }
+            .datatype { 
+                margin-left: 20px; 
+                margin-top: 15px; 
+                padding: 10px;
+                background-color: #f8f9fa;
+                border-radius: 4px;
+            }
+            .datatype h3 {
+                margin: 0;
+                font-size: 16px;
+                color: #495057;
+            }
+            .values-container {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(400px, 1fr));
+                gap: 5px;
+                margin-top: 10px;
+            }
+            .value { 
+                margin-bottom: 5px; 
+                padding: 8px;
+                background-color: white;
+                border-radius: 3px;
+                border-left: 4px solid #6c757d;
+                overflow-wrap: break-word;
+                word-wrap: break-word;
+                word-break: break-word;
+            }
+            .high-severity { 
+                border-left-color: #dc3545;
+                background-color: #fdf7f7;
+            }
+            .medium-severity {
+                border-left-color: #ffc107;
+                background-color: #fffdf7;
+            }
+            .api-endpoint {
+                border-left-color: #17a2b8;
+                background-color: #f0f9fa;
+            }
+            .runtime-error {
+                background-color: #f8d7da;
+                border-left-color: #dc3545;
+                color: #721c24;
+            }
+            .endpoint { 
+                background-color: #e9f5ff; 
+                padding: 15px; 
+                margin: 10px 0; 
+                border-radius: 4px; 
+                border-left: 4px solid #007bff;
+            }
+            .endpoint-method {
+                background-color: #007bff;
+                color: white;
+                display: inline-block;
+                padding: 2px 8px;
+                border-radius: 3px;
+                margin-right: 10px;
+                font-size: 12px;
+            }
+            .disclaimer { 
+                background-color: #fff3cd; 
+                padding: 15px; 
+                border: 1px solid #ffeeba; 
+                border-radius: 4px; 
+                margin-top: 30px; 
+                color: #856404;
+            }
+            .badge {
+                display: inline-block;
+                padding: 3px 7px;
+                font-size: 12px;
+                font-weight: 700;
+                border-radius: 10px;
+                margin-left: 5px;
+            }
+            .badge-primary { background-color: #007bff; color: white; }
+            .badge-danger { background-color: #dc3545; color: white; }
+            .badge-warning { background-color: #ffc107; color: #212529; }
+            .collapsible {
+                background-color: #f8f9fa;
+                color: #444;
+                cursor: pointer;
+                padding: 18px;
+                width: 100%;
+                border: none;
+                text-align: left;
+                outline: none;
+                font-size: 15px;
+                border-radius: 4px;
+                margin-bottom: 5px;
+                transition: 0.4s;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .active, .collapsible:hover { background-color: #e9ecef; }
+            .collapsible:after { content: '\002B'; font-weight: bold; float: right; }
+            .active:after { content: '\2212'; }
+            .content {
+                padding: 0 18px;
+                max-height: 0;
+                overflow: hidden;
+                transition: max-height 0.2s ease-out;
+                background-color: white;
+                border-radius: 0 0 4px 4px;
+            }
+            .error-section {
+                background-color: #f8d7da;
+                border-radius: 5px;
+                padding: 15px;
+                margin-bottom: 20px;
+            }
+            @media (max-width: 768px) {
+                .values-container {
+                    grid-template-columns: 1fr;
+                }
+                .metadata {
+                    grid-template-columns: 1fr;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <header>
+                <h1>File Analysis Report</h1>
+                <p>Generated on: 2025-09-17 11:05:49</p>
+            </header>
+    
+        <section class="summary">
+            <h2>Analysis Summary</h2>
+            <p><strong>Total Findings:</strong> 14</p>
+    
+            <h3>File Metadata</h3>
+            <div class="metadata">
+        <div class="metadata-item"><strong>Owner ID:</strong> 501</div><div class="metadata-item"><strong>Filename:</strong> settings.yaml</div><div class="metadata-item"><strong>Group ID:</strong> 20</div><div class="metadata-item"><strong>Accessed:</strong> 1758131137.9378383</div><div class="metadata-item"><strong>Modified:</strong> 1758131137.6121604</div><div class="metadata-item"><strong>File size:</strong> 398 bytes</div><div class="metadata-item"><strong>Permissions:</strong> 33188</div><div class="metadata-item"><strong>Created:</strong> 1758131137.6121604</div>
+            </div>
+        
+        </section>
+    
+        <section class="category">
+            <h2>Network Information <span class="badge badge-primary">2</span></h2>
+        
+                <button class="collapsible">
+                    Domain Keywords 
+                    <span class="badge badge-primary">1</span>
+                </button>
+                <div class="content">
+                    <div class="datatype">
+                        <div class="values-container">
+                <div class="value normal">hooks.slack.com</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="collapsible">
+                    Url 
+                    <span class="badge badge-primary">1</span>
+                </button>
+                <div class="content">
+                    <div class="datatype">
+                        <div class="values-container">
+                <div class="value api-endpoint">https://hooks.slack.com/services/T000/B000/fixture123</div>
+                        </div>
+                    </div>
+                </div>
+                
+        </section>
+        
+        <section class="category">
+            <h2>Authentication <span class="badge badge-primary">1</span></h2>
+        
+                <button class="collapsible">
+                    Access Token 
+                    <span class="badge badge-danger">1</span>
+                </button>
+                <div class="content">
+                    <div class="datatype">
+                        <div class="values-container">
+                <div class="value high-severity">yaml-secret-456<div class='meta'>/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:3</div></div>
+                        </div>
+                    </div>
+                </div>
+                
+        </section>
+        
+        <section class="category">
+            <h2>API & Keys <span class="badge badge-primary">5</span></h2>
+        
+                <button class="collapsible">
+                    Api Key 
+                    <span class="badge badge-danger">5</span>
+                </button>
+                <div class="content">
+                    <div class="datatype">
+                        <div class="values-container">
+                <div class="value high-severity">backup-token-987<div class='meta'>/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:21</div></div><div class="value high-severity">alerts@example.com<div class='meta'>/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:17</div></div><div class="value high-severity">kv/projects/sample<div class='meta'>/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:20</div></div><div class="value high-severity">https://api.example.com/v2<div class='meta'>/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:2</div></div><div class="value high-severity">https://hooks.slack.com/services/T000/B000/fixture123<div class='meta'>/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:16</div></div>
+                        </div>
+                    </div>
+                </div>
+                
+        </section>
+        
+        <section class="category">
+            <h2>API Information <span class="badge badge-primary">5</span></h2>
+        
+                <button class="collapsible">
+                    Webhook Url 
+                    <span class="badge badge-primary">1</span>
+                </button>
+                <div class="content">
+                    <div class="datatype">
+                        <div class="values-container">
+                <div class="value normal">webhook: "https://hooks.slack.com/services/T000/B000/fixture123"</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="collapsible">
+                    Request Header 
+                    <span class="badge badge-primary">4</span>
+                </button>
+                <div class="content">
+                    <div class="datatype">
+                        <div class="values-container">
+                <div class="value normal">logging:
+  level: INFO</div><div class="value normal">secrets:
+  vault_path: "kv/projects/sample"</div><div class="value normal">service:
+  endpoint: "https://api.example.com/v2"</div><div class="value normal">notifications:
+  slack_webhook: "https://hooks.slack.com/services/T000/B000/fixture123"</div>
+                        </div>
+                    </div>
+                </div>
+                
+        </section>
+        
+        <section class="category">
+            <h2>Network <span class="badge badge-primary">1</span></h2>
+        
+                <button class="collapsible">
+                    Network Protocols 
+                    <span class="badge badge-primary">1</span>
+                </button>
+                <div class="content">
+                    <div class="datatype">
+                        <div class="values-container">
+                <div class="value normal">HTTPS</div>
+                        </div>
+                    </div>
+                </div>
+                
+        </section>
+        
+        <div class="disclaimer">
+            <h3>Warning Disclaimer</h3>
+            <p>This analysis is based on pattern matching and heuristics, and may not be exhaustive.</p>
+            <p>Some API endpoints, credentials, or sensitive data might not be detected.</p>
+            <p>Successful API request examples are based on contextual clues and might be incomplete.</p>
+            <p>For critical security analysis, always perform manual verification.</p>
+        </div>
+        
+        <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            var coll = document.getElementsByClassName("collapsible");
+            for (var i = 0; i < coll.length; i++) {
+                coll[i].addEventListener("click", function() {
+                    this.classList.toggle("active");
+                    var content = this.nextElementSibling;
+                    if (content.style.maxHeight) {
+                        content.style.maxHeight = null;
+                    } else {
+                        content.style.maxHeight = content.scrollHeight + "px";
+                    }
+                });
+            }
+        });
+        </script>
+    </div>
+    </body>
+    </html>
+    

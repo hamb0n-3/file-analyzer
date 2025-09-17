@@ -1,0 +1,271 @@
+{
+  "__meta__": {
+    "access_token": [
+      {
+        "column": 17,
+        "confidence": 0.57,
+        "description": "'refresh_token' assigned to a suspicious value (entropy=3.50).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+        "fingerprint": "23afbbe396f9d1e09245e5010fb3a5b132471ac75b23752de5e31abacaada1ac",
+        "line": 8,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "medium",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (refresh_token)",
+        "value": "fixture-refresh-token"
+      }
+    ],
+    "api_key": [
+      {
+        "column": 7,
+        "confidence": 0.6,
+        "description": "URI or connection string contains embedded credentials.",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+        "fingerprint": "4fd43fac744b86ad128a89c5e479be24bb686d5616ba35d78bd2528b46a7cf33",
+        "line": 11,
+        "rule_id": "CONNECTION_STRING",
+        "severity": "high",
+        "tags": [
+          "db",
+          "uri",
+          "connection"
+        ],
+        "title": "Connection string with credentials",
+        "value": "db-pass-123"
+      },
+      {
+        "column": 17,
+        "confidence": 0.5662,
+        "description": "'client_secret' assigned to a suspicious value (entropy=3.40).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+        "fingerprint": "b49bf846f2845ddf244b8165f961eef02406b0228047ceac289d5d68638a0b36",
+        "line": 7,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "medium",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (client_secret)",
+        "value": "fixture-client-secret"
+      },
+      {
+        "column": 7,
+        "confidence": 0.4081,
+        "description": "'uri' assigned to a suspicious value (entropy=4.45).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+        "fingerprint": "e8188fafbd465d49e3069906f6fc4857558b1ed9144b230ff28c368fb468a0e1",
+        "line": 11,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (uri)",
+        "value": "postgresql://sample:db-pass-123@db.internal.local:5432/sample"
+      },
+      {
+        "column": 9,
+        "confidence": 0.394,
+        "description": "'alert' assigned to a suspicious value (entropy=4.10).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+        "fingerprint": "aac9332085338273a0a78f310cd34fbb5c1a8fe62985a693e877a51e1c46bcfd",
+        "line": 15,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (alert)",
+        "value": "https://hooks.example.internal/notify"
+      },
+      {
+        "column": 8,
+        "confidence": 0.3709,
+        "description": "'name' assigned to a suspicious value (entropy=3.52).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+        "fingerprint": "eac0b8b34ab87565a4b1667f0e1739930dc9c1ddd001c1b4d17a58f1eb5cfaa6",
+        "line": 2,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (name)",
+        "value": "sample-project"
+      },
+      {
+        "column": 13,
+        "confidence": 0.3682,
+        "description": "'client_id' assigned to a suspicious value (entropy=3.45).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+        "fingerprint": "0b7bf0ffd8ed841a3690b39579076b938c3d58bf3cbc4410477e02d0c9c9f7fe",
+        "line": 6,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (client_id)",
+        "value": "fixture-client-id"
+      },
+      {
+        "column": 10,
+        "confidence": 0.339,
+        "description": "'region' assigned to a suspicious value (entropy=2.73).",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+        "fingerprint": "5aac321645f476f981b84eb70a458dc76448808df7981e018bfcc22945d6250a",
+        "line": 3,
+        "rule_id": "ENV_ASSIGNMENT",
+        "severity": "low",
+        "tags": [
+          "assignment",
+          "env",
+          "config"
+        ],
+        "title": "Potential secret in assignment (region)",
+        "value": "us-west-2"
+      }
+    ],
+    "url": [
+      {
+        "column": 7,
+        "confidence": 0.5,
+        "description": "URL contains username:password@host.",
+        "file": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini",
+        "fingerprint": "ae6804fe26a4449dd86a4402b7cb422d3484d662b0199402a0014b58d189cc49",
+        "line": 11,
+        "rule_id": "BASIC_AUTH_IN_URL",
+        "severity": "high",
+        "tags": [
+          "url",
+          "basic-auth"
+        ],
+        "title": "URL with embedded credentials",
+        "value": "postgresql://sample:db-pass-123@db.internal.local:5432"
+      }
+    ]
+  },
+  "_api_structure": {},
+  "_metadata": {
+    "generated_by": "file-analyzer",
+    "timestamp": "2025-09-17T11:05:49.686005",
+    "version": "1.0.0"
+  },
+  "access_token": [
+    "fixture-refresh-token"
+  ],
+  "api_auth_scheme": [],
+  "api_doc_comment": [],
+  "api_endpoint": [],
+  "api_framework": [],
+  "api_key": [
+    "db-pass-123",
+    "fixture-client-id",
+    "fixture-client-secret",
+    "https://hooks.example.internal/notify",
+    "postgresql://sample:db-pass-123@db.internal.local:5432/sample",
+    "sample-project",
+    "us-west-2"
+  ],
+  "api_key_param": [],
+  "api_method": [],
+  "api_parameter": [],
+  "api_request_examples": [],
+  "api_version": [],
+  "authorization_header": [],
+  "aws_key": [],
+  "base64_encoded": [],
+  "cloud_endpoint": [],
+  "code_complexity": [],
+  "code_quality": [],
+  "commented_code": [],
+  "content_type": [],
+  "cookie": [],
+  "credit_card": [],
+  "curl_command": [],
+  "database_connection": [],
+  "domain_keywords": [
+    "db.internal.local",
+    "hooks.example.internal"
+  ],
+  "email": [],
+  "error_pattern": [],
+  "failed_json_request": [],
+  "file_metadata": [
+    "Accessed: 1758131160.200531",
+    "Created: 1758131158.977397",
+    "File size: 318 bytes",
+    "Filename: config.ini",
+    "Group ID: 20",
+    "Modified: 1758131158.977397",
+    "Owner ID: 501",
+    "Permissions: 33188"
+  ],
+  "firebase_url": [],
+  "form_data": [],
+  "graphql_query": [],
+  "graphql_schema": [],
+  "hash": [],
+  "high_entropy_strings": [],
+  "http_error": [],
+  "http_status_code": [],
+  "ipv4": [],
+  "ipv6": [],
+  "jwt": [],
+  "mac_address": [],
+  "ml_api_findings": [],
+  "ml_credential_findings": [],
+  "network_endpoints": [],
+  "network_hosts": [],
+  "network_ports": [],
+  "network_protocols": [
+    "HTTPS"
+  ],
+  "network_security_issues": [],
+  "oauth_flow": [],
+  "oauth_token": [],
+  "openapi_schema": [],
+  "pagination": [],
+  "password": [],
+  "path_parameter": [],
+  "private_key": [],
+  "public_key": [],
+  "query_parameter": [],
+  "rate_limit": [],
+  "rate_limit_header": [],
+  "refresh_token": [],
+  "request_body_json": [],
+  "request_header": [],
+  "rest_resource": [],
+  "runtime_errors": [],
+  "security_smells": [],
+  "session_id": [],
+  "social_security": [],
+  "software_versions": [],
+  "successful_json_request": [],
+  "supabase_url": [],
+  "url": [
+    "https://hooks.example.internal/notify",
+    "postgresql://sample:db-pass-123@db.internal.local:5432"
+  ],
+  "username": [],
+  "va_gov_domain": [],
+  "va_gov_url": [],
+  "webhook_event": [],
+  "webhook_url": [],
+  "xml_response": []
+}

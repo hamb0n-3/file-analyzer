@@ -1,0 +1,39 @@
+=== File Analysis Results ===
+Run Details:
+  Generated: 2025-09-17 11:05:47
+  File: /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml
+  Plugins: secrets
+  Scan Mode: file
+
+File Metadata:
+  Accessed: 1758131137.9378383
+  Created: 1758131137.6121604
+  File size: 398 bytes
+  Filename: settings.yaml
+  Group ID: 20
+  Modified: 1758131137.6121604
+  Owner ID: 501
+  Permissions: 33188
+
+Total Findings: 14
+
+Authentication (1 findings):
+  Access Token (1 found):
+    - yaml-secret-456
+
+API & Keys (5 findings):
+  Api Key (5 found):
+    - backup-token-987
+    - alerts@example.com
+    - kv/projects/sample
+    - https://api.example.com/v2
+    - https://hooks.slack.com/services/T000/B000/fixture123
+
+================================================================================
+WARNING DISCLAIMER:
+--------------------------------------------------------------------------------
+This analysis is based on pattern matching and heuristics, and may not be exhaustive.
+Some API endpoints, credentials, or sensitive data might not be detected.
+Successful API request examples are based on contextual clues and might be incomplete.
+For critical security analysis, always perform manual verification.
+================================================================================

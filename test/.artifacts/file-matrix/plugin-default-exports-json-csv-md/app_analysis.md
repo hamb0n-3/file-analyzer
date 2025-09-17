@@ -1,0 +1,89 @@
+```
+=== File Analysis Results ===
+Run Details:
+  Generated: 2025-09-17 11:05:46
+  File: /Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py
+  Plugins: all
+  Scan Mode: file
+
+File Metadata:
+  Accessed: 1758131131.1394048
+  Created: 1758131130.781706
+  File size: 1606 bytes
+  Filename: app.py
+  Group ID: 20
+  Modified: 1758131130.781706
+  Owner ID: 501
+  Permissions: 33188
+
+Total Findings: 42
+
+Network Information (9 findings):
+  Domain Keywords (7 found):
+    - config.ini
+    - os.environ.get
+    - self.overrides
+    - db.internal.local
+    - self.DEFAULTS.get
+    - self.overrides.get
+    - hooks.example.internal
+  Url (2 found):
+    - https://hooks.example.internal/notify
+    - postgresql://{user}:{DB_PASSWORD}@{host}:5432 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:21)
+
+Authentication (3 findings):
+  Password (2 found):
+    - db-pass-123 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:11)
+    - API_KEY = "ZZZ_SUPER_SECRET" (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:10)
+  Access Token (1 found):
+    - hardcoded-token (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:12)
+
+API & Keys (9 findings):
+  Api Key (9 found):
+    - us-west-2 (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:14)
+    - {DB_PASSWORD} (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:21)
+    - overrides or {} (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:41)
+    - ZZZ_SUPER_SECRET (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:10)
+    - Dict[str, bool] = { (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:34)
+    - https://hooks.example.internal/notify (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:13)
+    - Path(__file__).with_name("config.ini") (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:50)
+    - os.environ.get("SAMPLE_DB_HOST", "db.internal.local") (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:20)
+    - hashlib.sha256((payload + SERVICE_TOKEN).encode("utf-8")).hexdigest() (/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:27)
+
+API Information (1 findings):
+  Path Parameter (1 found):
+    - /{user}
+
+API Frameworks (1 findings):
+  Api Framework (1 found):
+    - JavaScript framework: TypeScript
+
+Code Quality (7 findings):
+  Code Complexity (1 found):
+    - Complex regex pattern at line 13
+  Security Smells (3 found):
+    - Hardcoded sensitive value in variable 'API_KEY' at line 10
+    - Hardcoded sensitive value in variable 'DB_PASSWORD' at line 11
+    - Hardcoded sensitive value in variable 'SERVICE_TOKEN' at line 12
+  Code Quality (1 found):
+    - Low maintainability index: 56.01/100
+  Commented Code (2 found):
+    - Commented code at line 13
+    - Commented code at line 21
+
+Network (4 findings):
+  Network Protocols (4 found):
+    - ICMP
+    - HTTPS
+    - Network protocol: ICMP
+    - Network protocol: HTTPS
+
+================================================================================
+WARNING DISCLAIMER:
+--------------------------------------------------------------------------------
+This analysis is based on pattern matching and heuristics, and may not be exhaustive.
+Some API endpoints, credentials, or sensitive data might not be detected.
+Successful API request examples are based on contextual clues and might be incomplete.
+For critical security analysis, always perform manual verification.
+================================================================================
+```

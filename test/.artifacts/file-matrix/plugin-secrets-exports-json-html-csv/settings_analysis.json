@@ -1,0 +1,44 @@
+{
+  "_metadata": {
+    "generated_by": "file-analyzer",
+    "timestamp": "2025-09-17T11:05:48.244121",
+    "version": "1.0.0"
+  },
+  "access_token": [
+    "yaml-secret-456"
+  ],
+  "api_key": [
+    "alerts@example.com",
+    "backup-token-987",
+    "https://api.example.com/v2",
+    "https://hooks.slack.com/services/T000/B000/fixture123",
+    "kv/projects/sample"
+  ],
+  "aws_key": [],
+  "base64_encoded": [],
+  "cookie": [],
+  "credit_card": [],
+  "database_connection": [],
+  "email": [],
+  "file_metadata": [
+    "Accessed: 1758131137.9378383",
+    "Created: 1758131137.6121604",
+    "File size: 398 bytes",
+    "Filename: settings.yaml",
+    "Group ID: 20",
+    "Modified: 1758131137.6121604",
+    "Owner ID: 501",
+    "Permissions: 33188"
+  ],
+  "high_entropy_strings": [],
+  "jwt": [],
+  "oauth_token": [],
+  "password": [],
+  "private_key": [],
+  "refresh_token": [],
+  "runtime_errors": [],
+  "session_id": [],
+  "social_security": [],
+  "username": [],
+  "xml_response": []
+}
