@@ -3,6 +3,7 @@
 
 import sys
 import os
+import importlib.util
 import argparse
 import logging
 import time
@@ -92,6 +93,7 @@ def parse_arguments():
     parser.add_argument('--skip-checks', action='store_true', help='Skip dependency checks (for advanced users)')
     parser.add_argument('--requirements', action='store_true', help='Generate requirements.txt file and exit')
     parser.add_argument('--version', action='store_true', help='Show version information and exit')
+    parser.add_argument('--test', action='store_true', help='Run the project test suite and exit')
     parser.add_argument('--config', help='Path to configuration file')
     parser.add_argument('--plugin-dir', action='append', help='Additional plugin directory')
     parser.add_argument('--parallel', type=int, default=0, help='Number of parallel workers (0=auto, default: auto)')
@@ -1017,15 +1019,65 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
 
 
 
+def _run_internal_tests(colors) -> int:
+    def _locate_runner() -> Path:
+        env_file = os.environ.get('FILE_ANALYZER_TEST_RUNNER')
+        if env_file and Path(env_file).exists():
+            return Path(env_file)
+        env_root = os.environ.get('FILE_ANALYZER_TEST_ROOT')
+        if env_root:
+            p = Path(env_root) / 'test' / 'run_all_tests.py'
+            if p.exists():
+                return p
+        p = Path.cwd() / 'test' / 'run_all_tests.py'
+        if p.exists():
+            return p
+        pkg_root = Path(__file__).resolve().parents[1]
+        p = pkg_root / 'test' / 'run_all_tests.py'
+        if p.exists():
+            return p
+        return Path('')
+
+    runner_path = _locate_runner()
+    if not runner_path or not runner_path.exists():
+        print(colors['red']('Failed to load test runner:') +
+              " internal tests are not packaged. Run from the repository root, "
+              "or set FILE_ANALYZER_TEST_ROOT to the repo path.")
+        return 1
+
+    try:
+        spec = importlib.util.spec_from_file_location('fa_internal_tests', str(runner_path))
+        if spec is None or spec.loader is None:
+            raise RuntimeError('spec loader unavailable')
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+    except Exception as exc:
+        print(f"{colors['red']('Failed to load test runner:')} {exc}")
+        return 1
+    if not hasattr(mod, 'run'):
+        print(colors['red']('Test runner does not expose a run() function'))
+        return 1
+    return int(mod.run(None))
+
+
 def main():
     """Main entry point function."""
     start_time = time.time()
     
+    # Fast-path: allow --test to run before full argument parsing
+    if '--test' in sys.argv:
+        colors = setup_colored_output()
+        return _run_internal_tests(colors)
+
     # Parse command line arguments
     args = parse_arguments()
     
     # Get colored output formatter
     colors = setup_colored_output()
+    
+    # Run internal tests if requested (before any heavy initialization)
+    if getattr(args, 'test', False):
+        return _run_internal_tests(colors)
     
     # Show version info if requested
     if args.version:

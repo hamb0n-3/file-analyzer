@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 # Setup script for installing the file_analyzer package
 
+from pathlib import Path
 from setuptools import setup, find_packages
 import os
 import re
 
-# Read version from file_analyzer/__init__.py
-with open(os.path.join('file_analyzer', '__init__.py'), 'r') as f:
+BASE_DIR = Path(__file__).resolve().parent
+
+# Read version from file_analyzer/__init__.py (works from any cwd)
+init_path = BASE_DIR / '__init__.py'
+with init_path.open('r', encoding='utf-8') as f:
     version_match = re.search(r"^__version__ = ['\"]([^'\"]*)['\"]", f.read(), re.M)
-    if version_match:
-        version = version_match.group(1)
-    else:
-        version = '0.1.0'
+    version = version_match.group(1) if version_match else '0.1.0'
 
 # Read long description from README.md
+readme_path = BASE_DIR.parent / 'README.md'
 try:
-    with open('README.md', 'r') as f:
+    with readme_path.open('r', encoding='utf-8') as f:
         long_description = f.read()
 except FileNotFoundError:
     long_description = 'A comprehensive file analysis tool for cybersecurity'
@@ -58,6 +60,9 @@ extras_require = {
     ]
 }
 
+subpackage_names = find_packages()
+packages = ['file_analyzer'] + [f"file_analyzer.{name}" for name in subpackage_names]
+
 setup(
     name='file-analyzer',
     version=version,
@@ -67,7 +72,8 @@ setup(
     author='Tristan Pereira',
     author_email='your.email@example.com',  # Replace with your email
     url='https://github.com/yourusername/file-analyzer',  # Replace with your GitHub repo
-    packages=find_packages(),
+    packages=packages,
+    package_dir={'file_analyzer': '.'},
     install_requires=install_requires,
     extras_require=extras_require,
     entry_points={
@@ -90,4 +96,3 @@ setup(
     ],
     python_requires='>=3.7',
 )
-

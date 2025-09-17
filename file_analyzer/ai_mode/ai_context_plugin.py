@@ -32,7 +32,7 @@ except Exception:  # pragma: no cover - fallback for standalone usage
 
 
 class OllamaLLM:
-    """Minimal wrapper around the `ollama` Python client."""
+    """Thin wrapper that now routes classification through ``llama.cpp`` instead of Ollama."""
 
     SYSTEM_PROMPT = (
         "You are a cybersecurity assistant. Given a raw value and a short context snippet, "
@@ -40,15 +40,42 @@ class OllamaLLM:
         "{SECRET, type, username (optional), usage, reasoning, file location.}"
     )
 
-    def __init__(self, model: str = "qwen3-4b:latest", host: Optional[str] = None) -> None:
-        self.model = model
-        if host:
-            os.environ["OLLAMA_HOST"] = host
+    def __init__(
+        self,
+        model: Optional[str] = None,
+        host: Optional[str] = None,
+        n_ctx: int = 0,
+        n_gpu_layers: int = 0,
+        **kwargs: Any,
+    ) -> None:
+        default_model = os.environ.get("LLAMA_MODEL", "models/llama-3.1-8b-instruct.Q4_K_M.gguf")
+        self.model = model or default_model
+        self.host = host  # preserved for API compatibility
         try:
-            import ollama  # type: ignore
+            from llama_cpp import Llama  # type: ignore
         except ImportError as exc:  # pragma: no cover - depends on runtime env
-            raise RuntimeError("The 'ollama' package is required for LLM classification") from exc
-        self._client = ollama
+            raise RuntimeError(
+                "llama-cpp-python is required but not installed. "
+                "Install with: pip install --upgrade llama-cpp-python"
+            ) from exc
+
+        n_threads = kwargs.pop("n_threads", None)
+        if not isinstance(n_threads, int) or n_threads <= 0:
+            n_threads = max(1, os.cpu_count() or 1)
+
+        self._llama = Llama(
+            model_path=self.model,
+            n_ctx=n_ctx,
+            n_gpu_layers=n_gpu_layers,
+            n_batch=kwargs.pop("n_batch", 1024),  # 512-1024 is a good CPU range; see notes
+            n_ubatch=kwargs.pop("n_ubatch", 256),  # micro-batch to cap peak RAM
+            logits_all=kwargs.pop("logits_all", False),  # leave off unless you need logprobs
+            flash_attn=kwargs.pop("flash_attn", True),  # try both True/False and keep what's faster on your CPU
+            n_threads=n_threads,
+            offload_kqv=kwargs.pop("offload_kqv", False),  # CPU only
+            verbose=False,
+            **kwargs,
+        )
 
     def build_messages(self, raw_secret: str, language: str, context_snippet: str) -> List[Dict[str, str]]:
         return [
@@ -64,6 +91,23 @@ class OllamaLLM:
             },
         ]
 
+    @staticmethod
+    def _parse_json_response(response_text: str) -> Optional[Dict[str, Any]]:
+        content = response_text.strip()
+        if not content:
+            return None
+        try:
+            return json.loads(content)
+        except Exception:
+            start = content.find("{")
+            end = content.rfind("}")
+            if start != -1 and end != -1 and end > start:
+                try:
+                    return json.loads(content[start : end + 1])
+                except Exception:
+                    logging.debug("Unable to parse llama.cpp JSON payload", exc_info=True)
+            return None
+
     def classify(
         self,
         raw_secret: str,
@@ -75,12 +119,19 @@ class OllamaLLM:
     ) -> Optional[Dict[str, Any]]:
         messages = messages or self.build_messages(raw_secret, language, context_snippet)
         try:
-            response = self._client.chat(model=self.model, messages=messages)
+            response = self._llama.create_chat_completion(
+                messages=messages,
+                temperature=0.2,
+                max_tokens=768,
+            )
         except Exception as exc:
-            logging.warning("Ollama chat failed: %s", exc)
+            logging.warning("llama.cpp chat failed: %s", exc)
             return None
 
-        content = (response or {}).get("message", {}).get("content", "")
+        try:
+            content = response["choices"][0]["message"]["content"]
+        except Exception:
+            content = ""
         parsed: Optional[Dict[str, Any]] = None
         if content:
             parsed = self._parse_json_response(content)
@@ -90,21 +141,6 @@ class OllamaLLM:
             except Exception:
                 logging.debug("Preview callback raised an exception", exc_info=True)
         return parsed
-
-    @staticmethod
-    def _parse_json_response(raw: str) -> Optional[Dict[str, Any]]:
-        try:
-            return json.loads(raw)
-        except Exception:
-            match = re.search(r"\{.*\}", raw, re.DOTALL)
-            if not match:
-                logging.debug("Failed to locate JSON payload in LLM response")
-                return None
-            try:
-                return json.loads(match.group(0))
-            except Exception:
-                logging.debug("Failed to parse JSON payload extracted from LLM response")
-                return None
 
 
 def shannon_entropy(value: str) -> float:
@@ -145,11 +181,18 @@ def detect_language_from_ext(path: Path) -> str:
     }.get(path.suffix.lower(), "text")
 
 
-def find_occurrences(text: str, needle: str) -> List[Tuple[int, int]]:
+def find_occurrences(
+    text: str,
+    needle: str,
+    lines: Optional[List[str]] = None,
+) -> List[Tuple[int, int]]:
     matches: List[Tuple[int, int]] = []
-    if not text or not needle:
+    if not needle:
         return matches
-    for line_no, line in enumerate(text.splitlines(), start=1):
+    search_lines = lines if lines is not None else text.splitlines()
+    if not search_lines:
+        return matches
+    for line_no, line in enumerate(search_lines, start=1):
         column = line.find(needle)
         if column != -1:
             matches.append((line_no, column + 1))
@@ -199,7 +242,7 @@ class SecretsContextPlugin(AnalyzerPlugin):
 
     def __init__(
         self,
-        model: str = "qwen3-1.7b:latest",
+        model: str = "models/llama-3.1-8b-instruct.Q4_K_M.gguf",
         use_llm: bool = True,
         ollama_host: Optional[str] = None,
         preview_count: int = 0,
@@ -210,6 +253,14 @@ class SecretsContextPlugin(AnalyzerPlugin):
         self._ollama_client: Optional[OllamaLLM] = None
         self.preview_count = max(0, int(preview_count or 0))
         self._preview_shown = 0
+        self._resolved_paths: Dict[str, Path] = {}
+        self._path_exists_cache: Dict[str, bool] = {}
+        self._file_cache: Dict[str, Tuple[str, List[str]]] = {}
+        self._file_cache_hits = 0
+        self._file_cache_misses = 0
+        # Hints to resolve relative paths robustly
+        self._search_base_dirs: List[Path] = []
+        self._cwd: Path = Path.cwd()
 
     def can_analyze(self, file_path: Path, file_type: str, content: Optional[str] = None) -> bool:
         if (file_type or "").lower() != "json":
@@ -230,10 +281,35 @@ class SecretsContextPlugin(AnalyzerPlugin):
         analyses: List[SecretAnalysis] = []
         llm_annotations: List[Optional[Dict[str, Any]]] = []
         self._preview_shown = 0
+        self._resolved_paths.clear()
+        self._path_exists_cache.clear()
+        self._file_cache.clear()
+        self._file_cache_hits = 0
+        self._file_cache_misses = 0
+        # Build a list of base directories to try when resolving relative paths.
+        # This makes analysis robust regardless of the current working directory.
+        try:
+            manifest_dir = Path(file_path).parent
+            # Include manifest directory and all its ancestors (towards root)
+            bases = [manifest_dir]
+            bases.extend(list(manifest_dir.parents))
+            # Deduplicate while preserving order
+            seen: set[str] = set()
+            self._search_base_dirs = []
+            for b in bases:
+                key = str(b)
+                if key in seen:
+                    continue
+                seen.add(key)
+                self._search_base_dirs.append(b)
+        except Exception:
+            self._search_base_dirs = []
         total_items = len(manifest)
         failures = 0
         llm_attempts = 0
         llm_successes = 0
+        llm_total_latency = 0.0
+        llm_max_latency = 0.0
         start_time = time.perf_counter()
         progress_bar = self._start_progress_bar(total_items)
         text_progress_active = False
@@ -244,7 +320,7 @@ class SecretsContextPlugin(AnalyzerPlugin):
         for idx, item in enumerate(manifest):
             llm_attempted = False
             try:
-                analysis, llm_info, llm_attempted = self._analyze_one(item, idx)
+                analysis, llm_info, llm_attempted, llm_duration = self._analyze_one(item, idx)
             except Exception as exc:
                 failures += 1
                 logging.exception("Failed to analyze secret #%s: %s", idx, exc)
@@ -253,6 +329,9 @@ class SecretsContextPlugin(AnalyzerPlugin):
                 llm_annotations.append(llm_info)
                 if llm_attempted:
                     llm_attempts += 1
+                    llm_total_latency += llm_duration
+                    if llm_duration > llm_max_latency:
+                        llm_max_latency = llm_duration
                     if llm_info:
                         llm_successes += 1
             finally:
@@ -286,14 +365,26 @@ class SecretsContextPlugin(AnalyzerPlugin):
             "llm_failures": llm_failures,
             "llm_skipped": llm_skipped,
             "duration_seconds": round(elapsed, 3),
+            "llm_total_seconds": round(llm_total_latency, 3),
+            "file_cache_hits": self._file_cache_hits,
+            "file_cache_misses": self._file_cache_misses,
+            "cached_files": len(self._file_cache),
         }
         if elapsed > 0:
             stats["secrets_per_second"] = round(processed / elapsed, 3)
+        if llm_attempts > 0:
+            stats["llm_avg_seconds"] = round(llm_total_latency / llm_attempts, 3)
+            stats["llm_max_seconds"] = round(llm_max_latency, 3)
 
         stats_message = (
             "Secrets enrichment stats | total=%d | processed=%d | failures=%d | llm=%d/%d | duration=%.2fs"
             % (total_items, processed, failures, llm_successes, llm_attempts, elapsed)
         )
+        if llm_attempts > 0:
+            stats_message += " | llm_time=%.2fs avg=%.2fs" % (
+                llm_total_latency,
+                stats["llm_avg_seconds"],
+            )
         logger.info(stats_message)
         if sys.stderr.isatty():
             print(stats_message, file=sys.stderr)
@@ -342,29 +433,113 @@ class SecretsContextPlugin(AnalyzerPlugin):
                 items.append(SecretInput(file=str(file_value), value=str(secret_value), hint=hint, line=line))
         return items
 
+    def _load_source_material(self, raw_path: str) -> Tuple[Path, str, List[str]]:
+        if self._is_remote_path(raw_path):
+            return Path(raw_path), "", []
+        resolved = self._resolve_local_path(raw_path)
+        text, lines = self._get_cached_file_content(resolved)
+        return resolved, text, lines
+
+    @staticmethod
+    def _is_remote_path(raw_path: str) -> bool:
+        return bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+.-]*://", raw_path))
+
+    def _resolve_local_path(self, raw_path: str) -> Path:
+        """Resolve a local path robustly.
+
+        Tries, in order:
+        - As provided (relative to CWD) if it exists
+        - Relative to the manifest directory
+        - Relative to ancestors of the manifest directory
+        Falls back to the best-effort absolute path if not found.
+        """
+        cached = self._resolved_paths.get(raw_path)
+        if cached is not None:
+            return cached
+
+        # Expand user first
+        path = Path(raw_path).expanduser()
+
+        # If already absolute, or exists relative to CWD, prefer it
+        try:
+            if path.is_absolute() and path.exists():
+                resolved = path
+                self._resolved_paths[raw_path] = resolved
+                return resolved
+        except Exception:
+            pass
+
+        # Try as-is relative to current working directory
+        try:
+            candidate = (self._cwd / path) if not path.is_absolute() else path
+            if candidate.exists():
+                resolved = candidate.resolve(strict=False)
+                self._resolved_paths[raw_path] = resolved
+                return resolved
+        except Exception:
+            pass
+
+        # Try resolving relative to manifest directory and its ancestors
+        for base in self._search_base_dirs:
+            try:
+                candidate = (base / path) if not path.is_absolute() else path
+                if candidate.exists():
+                    resolved = candidate.resolve(strict=False)
+                    self._resolved_paths[raw_path] = resolved
+                    return resolved
+            except Exception:
+                continue
+
+        # Best-effort: return an absolute version (may not exist)
+        try:
+            resolved = path.resolve(strict=False)
+        except Exception:
+            resolved = path.absolute()
+        self._resolved_paths[raw_path] = resolved
+        return resolved
+
+    def _get_cached_file_content(self, path: Path) -> Tuple[str, List[str]]:
+        key = str(path)
+        cached = self._file_cache.get(key)
+        if cached is not None:
+            self._file_cache_hits += 1
+            return cached
+
+        self._file_cache_misses += 1
+        exists = self._path_exists_cache.get(key)
+        if exists is None:
+            exists = path.exists()
+            self._path_exists_cache[key] = exists
+
+        text = ""
+        if exists:
+            try:
+                text = read_text(path)
+            except Exception:
+                text = ""
+
+        lines = text.splitlines() if text else []
+        cached_value = (text, lines)
+        self._file_cache[key] = cached_value
+        return cached_value
+
     def _analyze_one(
         self, item: SecretInput, idx: int
-    ) -> Tuple[SecretAnalysis, Optional[Dict[str, Any]], bool]:
-        source_path = Path(item.file)
-        if not str(source_path).startswith("s3://"):
-            source_path = source_path.expanduser().resolve()
-        text = ""
-        try:
-            if source_path.exists():
-                text = read_text(source_path)
-        except Exception:
-            text = ""
+    ) -> Tuple[SecretAnalysis, Optional[Dict[str, Any]], bool, float]:
+        source_path, text, lines = self._load_source_material(item.file)
 
-        language = detect_language_from_ext(source_path if isinstance(source_path, Path) else Path(item.file))
-        occurrences = find_occurrences(text, item.value)
-        var_name = self._guess_var_name(item, text, occurrences)
-        snippet = self._make_context_window(text, occurrences, default_line=item.line)
+        language = detect_language_from_ext(source_path)
+        occurrences = find_occurrences(text, item.value, lines)
+        var_name = self._guess_var_name(item, lines, occurrences)
+        snippet = self._make_context_window(lines, occurrences, default_line=item.line)
         entropy = shannon_entropy(item.value)
 
         llm_details: Optional[Dict[str, Any]] = None
         llm_attempted = False
+        llm_duration = 0.0
         if self.use_llm:
             llm_attempted = True
+            llm_start = time.perf_counter()
             try:
                 llm_client = self._ensure_ollama()
                 preview_callback = None
@@ -382,6 +557,8 @@ class SecretsContextPlugin(AnalyzerPlugin):
             except Exception as exc:
                 logging.warning("LLM classification unavailable: %s", exc)
                 llm_details = None
+            finally:
+                llm_duration = time.perf_counter() - llm_start
 
         analysis = SecretAnalysis(
             id=f"secret-{idx + 1}",
@@ -394,7 +571,7 @@ class SecretsContextPlugin(AnalyzerPlugin):
             context_snippet=snippet,
             var_name=var_name,
         )
-        return analysis, llm_details, llm_attempted
+        return analysis, llm_details, llm_attempted, llm_duration
 
     def _ensure_ollama(self) -> OllamaLLM:
         if self._ollama_client is None:
@@ -452,17 +629,17 @@ class SecretsContextPlugin(AnalyzerPlugin):
         return tqdm(total=total, desc="Enriching secrets", unit="secret")
 
     @staticmethod
-    def _guess_var_name(item: SecretInput, text: str, occurrences: List[Tuple[int, int]]) -> Optional[str]:
+    def _guess_var_name(
+        item: SecretInput, lines: List[str], occurrences: List[Tuple[int, int]]
+    ) -> Optional[str]:
         if item.hint:
             return str(item.hint)
-        if not text:
+        if not lines:
             return None
-        lines = text.splitlines()
         for line_no, _ in occurrences[:3]:
-            if 0 <= line_no - 1 < len(lines):
-                line = lines[line_no - 1]
-            else:
+            if not (0 <= line_no - 1 < len(lines)):
                 continue
+            line = lines[line_no - 1]
             match = re.search(r"([A-Z0-9_]{3,})\s*=\s*['\"].*?['\"]", line)
             if match:
                 return match.group(1)
@@ -472,8 +649,14 @@ class SecretsContextPlugin(AnalyzerPlugin):
         return None
 
     @staticmethod
-    def _make_context_window(text: str, occurrences: List[Tuple[int, int]], default_line: Optional[int] = None, radius: int = 4) -> str:
-        lines = text.splitlines()
+    def _make_context_window(
+        lines: List[str],
+        occurrences: List[Tuple[int, int]],
+        default_line: Optional[int] = None,
+        radius: int = 4,
+    ) -> str:
+        if not lines:
+            return ""
         if occurrences:
             center = occurrences[0][0]
         elif default_line:
@@ -482,6 +665,8 @@ class SecretsContextPlugin(AnalyzerPlugin):
             return ""
         start = max(1, center - radius)
         end = min(len(lines), center + radius)
+        if start > end:
+            return ""
         snippet_lines = []
         for line_no in range(start, end + 1):
             snippet_lines.append(f"{line_no:>5}: {lines[line_no - 1]}")

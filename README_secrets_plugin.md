@@ -1,6 +1,6 @@
 # Secrets Context Plugin
 
-This plugin ingests a **secrets manifest JSON**, opens the referenced source files to pull **context** around each secret, and (optionally) uses a **small local LLM via Ollama** to infer the secret’s type and likely provider. The classification metadata stays internal so the exported JSON remains clean and focused on raw findings.
+This plugin ingests a **secrets manifest JSON**, opens the referenced source files to pull **context** around each secret, and (optionally) uses a **small local LLM via `llama.cpp`** to infer the secret’s type and likely provider. The classification metadata stays internal so the exported JSON remains clean and focused on raw findings.
 
 ---
 
@@ -17,8 +17,8 @@ This plugin ingests a **secrets manifest JSON**, opens the referenced source fil
   - Attempts to infer variable/env name near the secret.
 - **Transparent output**
   - Emits the original secret alongside entropy, occurrences, and surrounding context.
-- **Ollama integration**
-  - Uses the local `ollama` Python package; classification is optional and its results are not written to the manifest JSON.
+- **Local LLM integration**
+  - Uses the [`llama-cpp-python`](https://github.com/abetlen/llama-cpp-python) bindings with a local `.gguf` model (configurable); classification is optional and its results are not written to the manifest JSON.
 
 ---
 
@@ -100,7 +100,7 @@ Optional:
 
 - The plugin reads files from disk; non-local locations (e.g., `s3://`) are not opened and will have empty context unless you extend `_analyze_one`.
 - Some binary or huge files might not be fully scanned—this plugin targets source-like files.
-- LLM usage is optional; if enabled, ensure `ollama` is running and the desired model is available locally.
+- LLM usage is optional; if enabled, ensure `llama-cpp-python` is installed and the configured `.gguf` model path is accessible to the analyzer process.
 
 ---
 
