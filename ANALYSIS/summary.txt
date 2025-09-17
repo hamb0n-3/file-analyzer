@@ -1,0 +1,4 @@
+Directory Summary
+Files (with findings): 0  Findings: 0  Generated: 2025-09-17 11:27:44  Scope: .  Plugins: secrets
+
+No files with findings detected.

@@ -76,6 +76,8 @@ class OllamaLLM:
             verbose=False,
             **kwargs,
         )
+        self.last_usage: Dict[str, Any] = {}
+        self.last_timings: Dict[str, Any] = {}
 
     def build_messages(self, raw_secret: str, language: str, context_snippet: str) -> List[Dict[str, str]]:
         return [
@@ -118,6 +120,8 @@ class OllamaLLM:
         preview_callback: Optional[Callable[[List[Dict[str, str]], str, Optional[Dict[str, Any]]], None]] = None,
     ) -> Optional[Dict[str, Any]]:
         messages = messages or self.build_messages(raw_secret, language, context_snippet)
+        self.last_usage = {}
+        self.last_timings = {}
         try:
             response = self._llama.create_chat_completion(
                 messages=messages,
@@ -127,6 +131,14 @@ class OllamaLLM:
         except Exception as exc:
             logging.warning("llama.cpp chat failed: %s", exc)
             return None
+
+        if isinstance(response, dict):
+            usage_info = response.get("usage")
+            timings_info = response.get("timings")
+            if isinstance(usage_info, dict):
+                self.last_usage = usage_info
+            if isinstance(timings_info, dict):
+                self.last_timings = timings_info
 
         try:
             content = response["choices"][0]["message"]["content"]
@@ -261,6 +273,7 @@ class SecretsContextPlugin(AnalyzerPlugin):
         # Hints to resolve relative paths robustly
         self._search_base_dirs: List[Path] = []
         self._cwd: Path = Path.cwd()
+        self._reset_llm_usage()
 
     def can_analyze(self, file_path: Path, file_type: str, content: Optional[str] = None) -> bool:
         if (file_type or "").lower() != "json":
@@ -286,6 +299,7 @@ class SecretsContextPlugin(AnalyzerPlugin):
         self._file_cache.clear()
         self._file_cache_hits = 0
         self._file_cache_misses = 0
+        self._reset_llm_usage()
         # Build a list of base directories to try when resolving relative paths.
         # This makes analysis robust regardless of the current working directory.
         try:
@@ -375,6 +389,8 @@ class SecretsContextPlugin(AnalyzerPlugin):
         if llm_attempts > 0:
             stats["llm_avg_seconds"] = round(llm_total_latency / llm_attempts, 3)
             stats["llm_max_seconds"] = round(llm_max_latency, 3)
+
+        stats["llm_usage"] = self._summarize_llm_usage()
 
         stats_message = (
             "Secrets enrichment stats | total=%d | processed=%d | failures=%d | llm=%d/%d | duration=%.2fs"
@@ -537,9 +553,14 @@ class SecretsContextPlugin(AnalyzerPlugin):
         llm_details: Optional[Dict[str, Any]] = None
         llm_attempted = False
         llm_duration = 0.0
+        llm_usage_payload: Optional[Dict[str, Any]] = None
+        llm_timings_payload: Optional[Dict[str, Any]] = None
+        is_preview_call = False
         if self.use_llm:
             llm_attempted = True
             llm_start = time.perf_counter()
+            bucket_key = "normal"
+            llm_client: Optional[OllamaLLM] = None
             try:
                 llm_client = self._ensure_ollama()
                 preview_callback = None
@@ -547,6 +568,8 @@ class SecretsContextPlugin(AnalyzerPlugin):
                 if self.preview_count and self._preview_shown < self.preview_count:
                     llm_messages = llm_client.build_messages(item.value, language, snippet)
                     preview_callback = self._make_preview_callback(idx, item, language)
+                    is_preview_call = True
+                    bucket_key = "preview"
                 llm_details = llm_client.classify(
                     item.value,
                     language,
@@ -554,11 +577,24 @@ class SecretsContextPlugin(AnalyzerPlugin):
                     messages=llm_messages,
                     preview_callback=preview_callback,
                 )
+                llm_usage_payload = getattr(llm_client, "last_usage", None)
+                llm_timings_payload = getattr(llm_client, "last_timings", None)
             except Exception as exc:
                 logging.warning("LLM classification unavailable: %s", exc)
                 llm_details = None
             finally:
                 llm_duration = time.perf_counter() - llm_start
+                if llm_client is not None:
+                    if not isinstance(llm_usage_payload, dict):
+                        llm_usage_payload = getattr(llm_client, "last_usage", None)
+                    if not isinstance(llm_timings_payload, dict):
+                        llm_timings_payload = getattr(llm_client, "last_timings", None)
+                    self._record_llm_usage(
+                        "preview" if is_preview_call else bucket_key,
+                        llm_duration,
+                        llm_usage_payload,
+                        llm_timings_payload,
+                    )
 
         analysis = SecretAnalysis(
             id=f"secret-{idx + 1}",
@@ -572,6 +608,124 @@ class SecretsContextPlugin(AnalyzerPlugin):
             var_name=var_name,
         )
         return analysis, llm_details, llm_attempted, llm_duration
+
+    @staticmethod
+    def _new_llm_usage_bucket() -> Dict[str, Any]:
+        return {
+            "calls": 0,
+            "total_seconds": 0.0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "prompt_eval_seconds": 0.0,
+            "prompt_eval_tokens": 0,
+            "completion_eval_seconds": 0.0,
+            "completion_eval_tokens": 0,
+        }
+
+    def _reset_llm_usage(self) -> None:
+        self._llm_usage: Dict[str, Dict[str, Any]] = {
+            "normal": self._new_llm_usage_bucket(),
+            "preview": self._new_llm_usage_bucket(),
+        }
+
+    def _record_llm_usage(
+        self,
+        bucket: str,
+        duration: float,
+        usage: Optional[Dict[str, Any]],
+        timings: Optional[Dict[str, Any]],
+    ) -> None:
+        bucket_stats = self._llm_usage.get(bucket)
+        if bucket_stats is None:
+            bucket_stats = self._new_llm_usage_bucket()
+            self._llm_usage[bucket] = bucket_stats
+        bucket_stats["calls"] += 1
+        bucket_stats["total_seconds"] += max(duration, 0.0)
+
+        if isinstance(usage, dict):
+            prompt_tokens = int(usage.get("prompt_tokens") or 0)
+            completion_tokens = int(usage.get("completion_tokens") or 0)
+            total_tokens = int(usage.get("total_tokens") or prompt_tokens + completion_tokens)
+            bucket_stats["prompt_tokens"] += prompt_tokens
+            bucket_stats["completion_tokens"] += completion_tokens
+            bucket_stats["total_tokens"] += total_tokens
+
+        if isinstance(timings, dict):
+            prompt_eval_ms = timings.get("prompt_eval_time") or 0.0
+            prompt_eval_tokens = int(timings.get("prompt_eval_count") or 0)
+            completion_eval_ms = timings.get("predicted_eval_time") or timings.get("eval_time") or 0.0
+            completion_eval_tokens = int(
+                timings.get("predicted_eval_count") or timings.get("eval_count") or 0
+            )
+            bucket_stats["prompt_eval_seconds"] += max(float(prompt_eval_ms) / 1000.0, 0.0)
+            bucket_stats["prompt_eval_tokens"] += max(prompt_eval_tokens, 0)
+            bucket_stats["completion_eval_seconds"] += max(float(completion_eval_ms) / 1000.0, 0.0)
+            bucket_stats["completion_eval_tokens"] += max(completion_eval_tokens, 0)
+
+    def _summarize_llm_usage(self) -> Dict[str, Any]:
+        summary: Dict[str, Any] = {}
+        for bucket_name in ("normal", "preview"):
+            bucket_stats = self._llm_usage.get(bucket_name) or self._new_llm_usage_bucket()
+            summary[bucket_name] = self._summarize_llm_bucket(bucket_stats)
+        return summary
+
+    @staticmethod
+    def _summarize_llm_bucket(bucket_stats: Dict[str, Any]) -> Dict[str, Any]:
+        calls = int(bucket_stats.get("calls", 0))
+        total_seconds = float(bucket_stats.get("total_seconds", 0.0))
+        prompt_tokens = int(bucket_stats.get("prompt_tokens", 0))
+        completion_tokens = int(bucket_stats.get("completion_tokens", 0))
+        total_tokens = int(bucket_stats.get("total_tokens", 0))
+        prompt_eval_seconds = float(bucket_stats.get("prompt_eval_seconds", 0.0))
+        completion_eval_seconds = float(bucket_stats.get("completion_eval_seconds", 0.0))
+        prompt_eval_tokens = int(bucket_stats.get("prompt_eval_tokens", 0))
+        completion_eval_tokens = int(bucket_stats.get("completion_eval_tokens", 0))
+
+        average_seconds = total_seconds / calls if calls else 0.0
+        tokens_per_second = (
+            total_tokens / total_seconds if total_tokens > 0 and total_seconds > 0 else 0.0
+        )
+
+        prompt_time_for_rate = prompt_eval_seconds if prompt_eval_seconds > 0 else total_seconds
+        prompt_tokens_for_rate = prompt_eval_tokens if prompt_eval_tokens > 0 else prompt_tokens
+        prompt_tokens_per_second = (
+            prompt_tokens_for_rate / prompt_time_for_rate
+            if prompt_tokens_for_rate > 0 and prompt_time_for_rate > 0
+            else 0.0
+        )
+
+        completion_time_for_rate = (
+            completion_eval_seconds if completion_eval_seconds > 0 else total_seconds
+        )
+        completion_tokens_for_rate = (
+            completion_eval_tokens if completion_eval_tokens > 0 else completion_tokens
+        )
+        completion_tokens_per_second = (
+            completion_tokens_for_rate / completion_time_for_rate
+            if completion_tokens_for_rate > 0 and completion_time_for_rate > 0
+            else 0.0
+        )
+
+        return {
+            "calls": calls,
+            "total_seconds": round(total_seconds, 3) if total_seconds else 0.0,
+            "average_seconds": round(average_seconds, 3) if average_seconds else 0.0,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "tokens_per_second": round(tokens_per_second, 3) if tokens_per_second else 0.0,
+            "prompt_eval_seconds": round(prompt_eval_seconds, 3) if prompt_eval_seconds else 0.0,
+            "prompt_tokens_per_second": round(prompt_tokens_per_second, 3)
+            if prompt_tokens_per_second
+            else 0.0,
+            "completion_eval_seconds": round(completion_eval_seconds, 3)
+            if completion_eval_seconds
+            else 0.0,
+            "completion_tokens_per_second": round(completion_tokens_per_second, 3)
+            if completion_tokens_per_second
+            else 0.0,
+        }
 
     def _ensure_ollama(self) -> OllamaLLM:
         if self._ollama_client is None:
