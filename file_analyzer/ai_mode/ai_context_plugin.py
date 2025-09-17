@@ -47,9 +47,8 @@ class OllamaLLM:
     """Thin wrapper that now routes classification through ``llama.cpp`` instead of Ollama."""
 
     SYSTEM_PROMPT = (
-        "You are a cybersecurity assistant. Given a raw value and a short context snippet, "
-        "classify whether it is a secret, whether it is a key, token, cert, hash, password, PII, or PHI. If it is not, ONLY respond with an empty json {}. If it is a secret, respond with strict JSON containing keys: "
-        "{SECRET, type, username (optional), usage, reasoning, file location.}"
+        "You classify potential security secrets. Read the value and context and decide if it is a real secret. Respond with JSON containing keys: secret, type, username (optional), usage, reasoning, file_location. If it is not a secret, reply with {} only."
+
     )
 
     def __init__(
@@ -100,7 +99,7 @@ class OllamaLLM:
                     f"FILE TYPE: {language}\n"
                     f"SECRET: {raw_secret}\n"
                     f"CONTEXT:\n{context_snippet}\n"
-                    "If there is a secret ONLY reply with JSON only using these keys {SECRET, type, username (optional), usage, reasoning, file location}. Else reply with {}"
+                    "If there is a secret ONLY reply with a JSON using these keys: SECRET, type, username (optional), usage, reasoning, file location. Else reply with \{\} only."
                 ),
             },
         ]
@@ -137,8 +136,8 @@ class OllamaLLM:
         try:
             response = self._llama.create_chat_completion(
                 messages=messages,
-                temperature=0.2,
-                max_tokens=768,
+                temperature=0.5,
+                max_tokens=1000,
             )
         except Exception as exc:
             logging.warning("llama.cpp chat failed: %s", exc)
@@ -448,7 +447,7 @@ class SecretsContextPlugin(AnalyzerPlugin):
         if sys.stderr.isatty():
             print(stats_message, file=sys.stderr)
 
-        result_json = self._build_output(file_path, analyses, stats)
+        result_json = self._build_output(file_path, analyses, llm_annotations, stats)
 
         if results_collector and hasattr(results_collector, "add_result"):
             for analysis, llm_info in zip(analyses, llm_annotations):
@@ -905,16 +904,66 @@ class SecretsContextPlugin(AnalyzerPlugin):
         return "\n".join(snippet_lines)
 
     def _build_output(
-        self, manifest_path: Path, analyses: List[SecretAnalysis], stats: Dict[str, Any]
+        self,
+        manifest_path: Path,
+        analyses: List[SecretAnalysis],
+        llm_annotations: List[Optional[Dict[str, Any]]],
+        stats: Dict[str, Any],
     ) -> Dict[str, Any]:
-        return {
-            "version": "1.0",
+        generated_at = datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z"
+
+        def _normalize_llm_payload(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+            normalized: Dict[str, Any] = {}
+            if not isinstance(raw, dict):
+                return normalized
+            for key, value in raw.items():
+                if not isinstance(key, str):
+                    continue
+                spaced_key = re.sub(r"(?<!^)(?=[A-Z])", " ", key)
+                normalized_key = spaced_key.replace("_", " ").strip().lower()
+                normalized[normalized_key] = value
+            return normalized
+
+        results: List[Dict[str, Any]] = []
+        for index, analysis in enumerate(analyses):
+            llm_payload = llm_annotations[index] if index < len(llm_annotations) else None
+            normalized = _normalize_llm_payload(llm_payload)
+            username_value = (
+                normalized.get("username")
+                or normalized.get("user name")
+                or normalized.get("user")
+            )
+
+            fallback_location = analysis.source_file
+            if analysis.occurrences:
+                first_occurrence = analysis.occurrences[0]
+                line = first_occurrence.get("line")
+                column = first_occurrence.get("column")
+                if line is not None:
+                    fallback_location = f"{fallback_location}:{line}"
+                    if column is not None:
+                        fallback_location = f"{fallback_location}:{column}"
+
+            result_entry: Dict[str, Any] = {
+                "secret": normalized.get("secret", analysis.secret_value),
+                "type": normalized.get("type", ""),
+                "usage": normalized.get("usage", ""),
+                "reasoning": normalized.get("reasoning", ""),
+                "file location": normalized.get("file location") or fallback_location,
+            }
+            if username_value:
+                result_entry["username"] = username_value
+
+            results.append(result_entry)
+
+        runs_metadata = {
+            "generated_at": generated_at,
             "plugin": self.name,
-            "generated_at": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
             "inputs": {"manifest_path": str(manifest_path)},
-            "results": [analysis.to_dict() for analysis in analyses],
             "statistics": stats,
         }
+
+        return {"results": results, "runs": runs_metadata}
 
 
 # Example usage:
