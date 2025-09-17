@@ -502,7 +502,7 @@ class EnvAssignmentDetector(Detector):
     name = "env_assignment"
 
     SUSPICIOUS_KEYS = tuple(k.lower() for k in (
-        "password", "passwd", "pwd", "secret", "seckey", "secret_key", "private_key",
+        "password", "passwd", "pass", "pw", "pwd","cert","secret", "seckey", "secret_key", "private_key",
         "api_key", "apikey", "access_key", "client_secret", "access_token", "token",
         "db_password", "db_pass", "pg_password", "mysql_password", "redis_password",
         "smtp_password", "jwt_secret", "s3_secret", "ssh_key", "ssh_private_key",

@@ -60,7 +60,7 @@ class OllamaLLM:
         n_gpu_layers: int = 0,
         **kwargs: Any,
     ) -> None:
-        default_model = os.environ.get("LLAMA_MODEL", "models/llama-3.1-8b-instruct.Q4_K_M.gguf")
+        default_model = os.environ["LLAMA_MODEL"],
         self.model = model or default_model
         self.host = host  # preserved for API compatibility
         try:
@@ -100,7 +100,7 @@ class OllamaLLM:
                     f"FILE TYPE: {language}\n"
                     f"SECRET: {raw_secret}\n"
                     f"CONTEXT:\n{context_snippet}\n"
-                    "Reply with JSON only using these keys {SECRET, type, username (optional), usage, reasoning, file location}."
+                    "If there is a secret ONLY reply with JSON only using these keys {SECRET, type, username (optional), usage, reasoning, file location}. Else reply with {}"
                 ),
             },
         ]
@@ -268,7 +268,7 @@ class SecretsContextPlugin(AnalyzerPlugin):
 
     def __init__(
         self,
-        model: str = "models/llama-3.1-8b-instruct.Q4_K_M.gguf",
+        model: str = os.environ["LLAMA_MODEL"],
         use_llm: bool = True,
         ollama_host: Optional[str] = None,
         preview_count: int = 0,
