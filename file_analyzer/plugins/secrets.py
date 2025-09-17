@@ -16,7 +16,6 @@ Major improvements over simplistic regex-only scanners
 • Multi-detector pipeline:
     - Strong regex rules for popular providers (AWS, GitHub, Slack, Stripe, GCP, etc).
     - Structure-aware detectors (PEM/SSH/PGP private keys, JWTs).
-    - High-entropy detector gated by context (env-var name, nearby keywords).
     - Key-value detector for .env / YAML / JSON / INI / code assignments.
     - Embedded base64 detector that decodes  (bounded) and rescans the plaintext.
     - Connection string detector (Postgres/MySQL/Mongo/Redis/AMQP/JDBC/SQLServer/Azure).
@@ -56,7 +55,6 @@ import hashlib
 import io
 import json
 import logging
-import math
 import os
 import re
 import stat
@@ -89,17 +87,6 @@ def is_mostly_text(data: bytes, threshold: float = 0.95) -> bool:
         return False
     printable = sum(1 for b in data if b in PRINTABLE)
     return printable / len(data) >= threshold
-
-
-def calculate_entropy(s: str) -> float:
-    """Shannon entropy in bits/char."""
-    if not s:
-        return 0.0
-    freq = {}
-    for ch in s:
-        freq[ch] = freq.get(ch, 0) + 1
-    length = len(s)
-    return -sum((c / length) * math.log2(c / length) for c in freq.values())
 
 
 def is_base64_like(s: str) -> bool:
@@ -173,8 +160,6 @@ class Rule:
     severity: str
     tags: List[str]
     min_len: int = 0
-    entropy_min: float = 0.0
-    entropy_max: float = 8.0
     ctx_keywords: Tuple[str, ...] = (
         "secret", "token", "password", "passwd", "pwd", "auth", "apikey",
         "api_key", "access_key", "private", "key", "client_secret", "credential",
@@ -225,19 +210,10 @@ def aws_secret_charset(s: str) -> bool:
     return bool(re.fullmatch(r'[A-Za-z0-9/+=]{40}', s))
 
 
-def plausible_random(s: str, min_entropy: float = 3.5) -> bool:
-    # Avoid classifying obvious placeholders
-    placeholders = {'changeme', 'password', 'secret', 'example', 'dummy', 'test', 'sample'}
-    if s.lower() in placeholders:
-        return False
-    return calculate_entropy(s) >= min_entropy
-
-
 VALIDATORS = {
     'luhn': luhn_check,
     'jwt': jwt_check,
     'aws_secret_charset': aws_secret_charset,
-    'randomish': plausible_random,
 }
 
 
@@ -340,7 +316,7 @@ DEFAULT_RULES: List[Rule] = [
          _c(r"(?i)\b(pass|password|pwd|secret|token|api[_-]?key|client[_-]?secret)\b"
             r"\s*[:=]\s*['\"][^'\"]{8,}['\"]"),
          "Suspicious credential assignment in code/config.", "password", "Generic", "medium",
-         ["generic", "assignment"], base_weight=0.45, validators=("randomish",)),
+         ["generic", "assignment"], base_weight=0.45),
 
     # Credit cards (demoted; requires Luhn)
     Rule("CREDIT_CARD", "Credit card number",
@@ -432,10 +408,6 @@ class RegexRuleDetector(Detector):
                 start, end = m.start(), m.end()
                 if rule.min_len and len(s) < rule.min_len:
                     continue
-                ent = calculate_entropy(s)
-                if ent < rule.entropy_min or ent > rule.entropy_max + 1e-9:
-                    # (entropy_max is mostly unused; leave in for future)
-                    pass
                 line, col = _offset_to_line_col(text, start)
                 conf = rule.base_weight
 
@@ -526,42 +498,6 @@ class JwtDetector(Detector):
                 description="JWT structure validated (header/payload decodable).",
                 tags=["jwt", "token"],
             )
-
-
-class HighEntropyDetector(Detector):
-    name = "high_entropy"
-
-    def __init__(self, min_len: int = 20, entropy: float = 4.0):
-        self.min_len = min_len
-        self.entropy = entropy
-        self.re_word = _c(r"[A-Za-z0-9/\+=]{%d,}" % min_len)
-
-    def detect(self, text: str, file: Path) -> Iterator[Finding]:
-        for m in self.re_word.finditer(text):
-            token = m.group(0)
-            ent = calculate_entropy(token)
-            if ent < self.entropy:
-                continue
-            # Require contextual hints to avoid noise
-            if not _has_keyword_nearby(text, m.start(), DEFAULT_KEYWORDS, window=80):
-                continue
-            line, col = _offset_to_line_col(text, m.start())
-            yield Finding(
-                rule_id="HIGH_ENTROPY",
-                title="High-entropy token (contextual)",
-                secret=token,
-                file=file,
-                start=m.start(),
-                end=m.end(),
-                line=line,
-                col=col,
-                severity="medium",
-                confidence=0.55 + _path_score(file),
-                description="High-entropy token near credential-like keywords.",
-                tags=["heuristic", "entropy"],
-            )
-
-
 class EnvAssignmentDetector(Detector):
     name = "env_assignment"
 
@@ -591,8 +527,7 @@ class EnvAssignmentDetector(Detector):
             ctx = 0.0
             if any(k in key_l for k in self.SUSPICIOUS_KEYS):
                 ctx += 0.2
-            ent = calculate_entropy(val)
-            conf = 0.45 + min(0.15, (ent - 3.0) * 0.04) + ctx + _path_score(file)
+            conf = 0.45 + ctx + _path_score(file)
             start_off = _line_col_to_offset(text, line_no, raw.find(val))
             yield Finding(
                 rule_id="ENV_ASSIGNMENT",
@@ -605,7 +540,7 @@ class EnvAssignmentDetector(Detector):
                 col=raw.find(val) + 1 if raw.find(val) >= 0 else 1,
                 severity="medium" if ctx >= 0.2 else "low",
                 confidence=max(0.0, min(1.0, conf)),
-                description=f"'{key}' assigned to a suspicious value (entropy={ent:.2f}).",
+                description=f"'{key}' assigned to a suspicious value.",
                 tags=["assignment", "env", "config"],
             )
 
@@ -669,16 +604,6 @@ class EmbeddedBase64Detector(Detector):
                     finding.description += " (decoded from embedded base64)"
                     finding.confidence = min(1.0, finding.confidence + 0.1)
                     yield finding
-
-
-DEFAULT_KEYWORDS = (
-    "secret", "password", "passwd", "pwd", "token",
-    "auth", "apikey", "api_key", "access_token", "bearer",
-    "client_secret", "private", "ssh", "key", "credential",
-)
-
-
-
 def _has_keyword_nearby(text: str, offset: int, keywords: Sequence[str], window: int = 120) -> bool:
     lo = max(0, offset - window)
     hi = min(len(text), offset + window)
@@ -797,7 +722,6 @@ class SecretScanner:
             RegexRuleDetector(self.rules),
             EnvAssignmentDetector(),
             ConnectionStringDetector(),
-            HighEntropyDetector(),
             EmbeddedBase64Detector(),
         ]
 
@@ -1153,9 +1077,6 @@ class SecretsAnalyzer(AnalyzerPlugin):
             if kind == "email" or "email" in tags:
                 return "email"
 
-            if rule.id == "HIGH_ENTROPY" or "entropy" in tags:
-                return "high_entropy_strings"
-
         # Non-rule detectors or fallbacks
         rid = finding.rule_id.upper()
         title = finding.title.lower()
@@ -1185,9 +1106,6 @@ class SecretsAnalyzer(AnalyzerPlugin):
             return "session_id"
         if "webhook" in title:
             return "webhook_url"
-        if "entropy" in rid or "entropy" in title:
-            return "high_entropy_strings"
-
         return "api_key"
 
     def _extract_env_key(self, title: str) -> Optional[str]:
