@@ -66,7 +66,7 @@ import time
 import zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Pattern, Sequence, Set, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, Callable
 
 # ---- Optional project integration (AnalyzerPlugin) ---------------------------
 try:
@@ -214,6 +214,58 @@ VALIDATORS = {
     'luhn': luhn_check,
     'jwt': jwt_check,
     'aws_secret_charset': aws_secret_charset,
+}
+
+RulePostFilter = Callable[[str, str, int, int, Path], bool]
+
+AWS_PATH_SUBSTRINGS = (
+    "/tmp/",
+    "/var/",
+    "/etc/",
+    "/opt/",
+    "/lib/",
+    "/usr/",
+    "/run/",
+    "/home/",
+    "/app/",
+    "/srv/",
+    "/mnt/",
+    "/ora",
+    "/oracle",
+    "/mbean",
+    "/mbeans",
+    "/logs",
+    "/log/",
+)
+
+ENV_PATH_HINTS = AWS_PATH_SUBSTRINGS + (
+    "orainstall",
+    "/config",
+    "config",
+    "/cache",
+    "cache",
+    "coherence",
+)
+
+AWS_SLASH_WORD_RE = re.compile(r"/(?:[a-z]{3,}|[A-Z][a-z]{2,})")
+ABSOLUTE_PATH_ROOTS_RE = re.compile(r"^/(?:tmp|var|etc|opt|lib|usr|home|app|srv|run|mnt|oracle|ora)/")
+WINDOWS_DRIVE_RE = re.compile(r"^[A-Za-z]:\\")
+DATE_FRAGMENT_RE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _aws_secret_post_filter(secret: str, text: str, start: int, end: int, file: Path) -> bool:
+    lower = secret.lower()
+    if secret.count('/') > 2:
+        return False
+    if AWS_SLASH_WORD_RE.search(secret):
+        return False
+    if any(token in lower for token in AWS_PATH_SUBSTRINGS):
+        return False
+    return True
+
+
+RULE_POST_FILTERS: Dict[str, RulePostFilter] = {
+    "AWS_SECRET_ACCESS_KEY": _aws_secret_post_filter,
 }
 
 
@@ -406,6 +458,9 @@ class RegexRuleDetector(Detector):
             for m in rule.regex.finditer(text):
                 s = m.group(0)
                 start, end = m.start(), m.end()
+                post_filter = RULE_POST_FILTERS.get(rule.id)
+                if post_filter and not post_filter(s, text, start, end, file):
+                    continue
                 if rule.min_len and len(s) < rule.min_len:
                     continue
                 line, col = _offset_to_line_col(text, start)
@@ -511,6 +566,25 @@ class EnvAssignmentDetector(Detector):
 
     PLACEHOLDERS = {"", "changeme", "placeholder", "example", "sample", "test", "dummy", "password", "secret"}
 
+    @staticmethod
+    def _looks_like_path_value(val: str) -> bool:
+        lower = val.lower()
+        if ABSOLUTE_PATH_ROOTS_RE.match(lower):
+            return True
+        if lower.startswith(("~/", "./", "../")):
+            return True
+        if val.startswith((".\\", "..\\")):
+            return True
+        if WINDOWS_DRIVE_RE.match(val):
+            return True
+        if "\\" in val:
+            return True
+        if "/" in val and any(token in lower for token in ENV_PATH_HINTS):
+            return True
+        if "/" in val and DATE_FRAGMENT_RE.search(val):
+            return True
+        return False
+
     def detect(self, text: str, file: Path) -> Iterator[Finding]:
         for line_no, raw in enumerate(text.splitlines(True), start=1):
             if raw.lstrip().startswith(('#', '//', ';')):
@@ -522,6 +596,8 @@ class EnvAssignmentDetector(Detector):
             key = m.group('key')
             val = (m.group('val') or "").strip().strip("'\"")
             if len(val) < 8 or val.lower() in self.PLACEHOLDERS:
+                continue
+            if self._looks_like_path_value(val):
                 continue
             key_l = key.lower()
             if not any(token in key_l for token in self.SUSPICIOUS_KEYS):

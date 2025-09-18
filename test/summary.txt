@@ -1,5 +1,5 @@
 Directory Summary
-Files (with findings): 10  Findings: 22  Generated: 2025-09-17 16:36:14  Scope: fixtures  Plugins: secrets
+Files (with findings): 10  Findings: 22  Generated: 2025-09-18 09:37:26  Scope: fixtures  Plugins: secrets
 
 advanced_project/src  total: 2
   - fixtures/advanced_project/src/api_client.js  findings: 1

@@ -1,19 +1,15 @@
 {
-  "generated_at": "2025-09-17 16:36:14",
+  "generated_at": "2025-09-18 09:37:26",
   "plugin_selection": "secrets",
   "plugins": {
     "secrets": {
       "total_findings": 21,
       "categories": {
-        "access_token": [
-          "Bearer ADV_PROJ_KEY_987654",
-          "QWxhZGRpbjpPcGVuU2VzYW1l",
-          "adv-helper-token-xyz",
-          "env-secret-789",
-          "fixture-refresh-token",
-          "hardcoded-token",
-          "os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")",
-          "yaml-secret-456"
+        "password": [
+          "API_KEY = \"ZZZ_SUPER_SECRET\"",
+          "SECRET = \"test-only-secret\"",
+          "db-pass-123",
+          "secret=\"fixture-html-secret\""
         ],
         "api_key": [
           "ZZZ_SUPER_SECRET",
@@ -27,133 +23,19 @@
           "test-only-secret",
           "{DB_PASSWORD}"
         ],
-        "password": [
-          "API_KEY = \"ZZZ_SUPER_SECRET\"",
-          "SECRET = \"test-only-secret\"",
-          "db-pass-123",
-          "secret=\"fixture-html-secret\""
+        "access_token": [
+          "Bearer ADV_PROJ_KEY_987654",
+          "QWxhZGRpbjpPcGVuU2VzYW1l",
+          "adv-helper-token-xyz",
+          "env-secret-789",
+          "fixture-refresh-token",
+          "hardcoded-token",
+          "os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")",
+          "yaml-secret-456"
         ]
       },
       "entries": {
-        "access_token": [
-          {
-            "value": "Bearer ADV_PROJ_KEY_987654",
-            "file": "fixtures/advanced_project/src/api_client.js",
-            "line": 9,
-            "username": "api_client.js"
-          },
-          {
-            "value": "yaml-secret-456",
-            "file": "fixtures/sample_project/settings.yaml",
-            "line": 3,
-            "username": "settings.yaml"
-          },
-          {
-            "value": "fixture-refresh-token",
-            "file": "fixtures/sample_project/config.ini",
-            "line": 8,
-            "username": "config.ini"
-          },
-          {
-            "value": "hardcoded-token",
-            "file": "fixtures/sample_project/app.py",
-            "line": 12,
-            "username": "app.py"
-          },
-          {
-            "value": "env-secret-789",
-            "file": "fixtures/sample_project/.env",
-            "line": 1,
-            "username": ".env"
-          },
-          {
-            "value": "adv-helper-token-xyz",
-            "file": "fixtures/advanced_project/src/helper.py",
-            "line": 6,
-            "username": "helper.py"
-          },
-          {
-            "value": "QWxhZGRpbjpPcGVuU2VzYW1l",
-            "file": "fixtures/advanced_project/src/nested/secrets.txt",
-            "line": 4,
-            "username": "secrets.txt"
-          },
-          {
-            "value": "os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")",
-            "file": "fixtures/sample_project/services.py",
-            "line": 15,
-            "username": "services.py"
-          }
-        ],
-        "api_key": [
-          {
-            "value": "test-only-secret",
-            "file": "fixtures/advanced_project/src/tests/test_placeholder.py",
-            "line": 4,
-            "username": "test_placeholder.py"
-          },
-          {
-            "value": "fixture-client-secret",
-            "file": "fixtures/sample_project/config.ini",
-            "line": 7,
-            "username": "config.ini"
-          },
-          {
-            "value": "db-pass-123",
-            "file": "fixtures/sample_project/config.ini",
-            "line": 11,
-            "username": "db.internal.local"
-          },
-          {
-            "value": "ZZZ_SUPER_SECRET",
-            "file": "fixtures/sample_project/app.py",
-            "line": 10,
-            "username": "app.py"
-          },
-          {
-            "value": "{DB_PASSWORD}",
-            "file": "fixtures/sample_project/app.py",
-            "line": 21,
-            "username": "app.py"
-          },
-          {
-            "value": "fixture-service-secret",
-            "file": "fixtures/sample_project/.env",
-            "line": 2,
-            "username": ".env"
-          },
-          {
-            "value": "fixture-password-321",
-            "file": "fixtures/sample_project/.env",
-            "line": 4,
-            "username": ".env"
-          },
-          {
-            "value": "adv-secret-001",
-            "file": "fixtures/advanced_project/src/nested/secrets.txt",
-            "line": 1,
-            "username": "secrets.txt"
-          },
-          {
-            "value": "oauth-client-secret-abc",
-            "file": "fixtures/sample_project/services.py",
-            "line": 11,
-            "username": "services.py"
-          },
-          {
-            "value": "svc-key-555",
-            "file": "fixtures/sample_project/services.py",
-            "line": 10,
-            "username": "services.py"
-          }
-        ],
         "password": [
-          {
-            "value": "SECRET = \"test-only-secret\"",
-            "file": "fixtures/advanced_project/src/tests/test_placeholder.py",
-            "line": 4,
-            "username": "test_placeholder.py"
-          },
           {
             "value": "secret=\"fixture-html-secret\"",
             "file": "fixtures/sample_project/templates/index.html",
@@ -171,6 +53,124 @@
             "file": "fixtures/sample_project/app.py",
             "line": 11,
             "username": "app.py"
+          },
+          {
+            "value": "SECRET = \"test-only-secret\"",
+            "file": "fixtures/advanced_project/src/tests/test_placeholder.py",
+            "line": 4,
+            "username": "test_placeholder.py"
+          }
+        ],
+        "api_key": [
+          {
+            "value": "ZZZ_SUPER_SECRET",
+            "file": "fixtures/sample_project/app.py",
+            "line": 10,
+            "username": "app.py"
+          },
+          {
+            "value": "{DB_PASSWORD}",
+            "file": "fixtures/sample_project/app.py",
+            "line": 21,
+            "username": "app.py"
+          },
+          {
+            "value": "test-only-secret",
+            "file": "fixtures/advanced_project/src/tests/test_placeholder.py",
+            "line": 4,
+            "username": "test_placeholder.py"
+          },
+          {
+            "value": "db-pass-123",
+            "file": "fixtures/sample_project/config.ini",
+            "line": 11,
+            "username": "db.internal.local"
+          },
+          {
+            "value": "fixture-client-secret",
+            "file": "fixtures/sample_project/config.ini",
+            "line": 7,
+            "username": "config.ini"
+          },
+          {
+            "value": "adv-secret-001",
+            "file": "fixtures/advanced_project/src/nested/secrets.txt",
+            "line": 1,
+            "username": "secrets.txt"
+          },
+          {
+            "value": "svc-key-555",
+            "file": "fixtures/sample_project/services.py",
+            "line": 10,
+            "username": "services.py"
+          },
+          {
+            "value": "oauth-client-secret-abc",
+            "file": "fixtures/sample_project/services.py",
+            "line": 11,
+            "username": "services.py"
+          },
+          {
+            "value": "fixture-service-secret",
+            "file": "fixtures/sample_project/.env",
+            "line": 2,
+            "username": ".env"
+          },
+          {
+            "value": "fixture-password-321",
+            "file": "fixtures/sample_project/.env",
+            "line": 4,
+            "username": ".env"
+          }
+        ],
+        "access_token": [
+          {
+            "value": "hardcoded-token",
+            "file": "fixtures/sample_project/app.py",
+            "line": 12,
+            "username": "app.py"
+          },
+          {
+            "value": "Bearer ADV_PROJ_KEY_987654",
+            "file": "fixtures/advanced_project/src/api_client.js",
+            "line": 9,
+            "username": "api_client.js"
+          },
+          {
+            "value": "adv-helper-token-xyz",
+            "file": "fixtures/advanced_project/src/helper.py",
+            "line": 6,
+            "username": "helper.py"
+          },
+          {
+            "value": "fixture-refresh-token",
+            "file": "fixtures/sample_project/config.ini",
+            "line": 8,
+            "username": "config.ini"
+          },
+          {
+            "value": "yaml-secret-456",
+            "file": "fixtures/sample_project/settings.yaml",
+            "line": 3,
+            "username": "settings.yaml"
+          },
+          {
+            "value": "QWxhZGRpbjpPcGVuU2VzYW1l",
+            "file": "fixtures/advanced_project/src/nested/secrets.txt",
+            "line": 4,
+            "username": "secrets.txt"
+          },
+          {
+            "value": "os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")",
+            "file": "fixtures/sample_project/services.py",
+            "line": 15,
+            "username": "services.py"
+          },
+          {
+            "value": "env-secret-789",
+            "file": "fixtures/sample_project/.env",
+            "line": 1,
+            "username": ".env"
           }
         ]
       }

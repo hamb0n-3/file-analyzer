@@ -4,6 +4,34 @@
     "total_findings": 22
   },
   "directories": {
+    "sample_project/templates": [
+      {
+        "file": "fixtures/sample_project/templates/index.html",
+        "total_findings": 1
+      }
+    ],
+    "sample_project": [
+      {
+        "file": "fixtures/sample_project/app.py",
+        "total_findings": 5
+      },
+      {
+        "file": "fixtures/sample_project/config.ini",
+        "total_findings": 3
+      },
+      {
+        "file": "fixtures/sample_project/settings.yaml",
+        "total_findings": 1
+      },
+      {
+        "file": "fixtures/sample_project/services.py",
+        "total_findings": 3
+      },
+      {
+        "file": "fixtures/sample_project/.env",
+        "total_findings": 3
+      }
+    ],
     "advanced_project/src": [
       {
         "file": "fixtures/advanced_project/src/api_client.js",
@@ -18,34 +46,6 @@
       {
         "file": "fixtures/advanced_project/src/tests/test_placeholder.py",
         "total_findings": 2
-      }
-    ],
-    "sample_project": [
-      {
-        "file": "fixtures/sample_project/settings.yaml",
-        "total_findings": 1
-      },
-      {
-        "file": "fixtures/sample_project/config.ini",
-        "total_findings": 3
-      },
-      {
-        "file": "fixtures/sample_project/app.py",
-        "total_findings": 5
-      },
-      {
-        "file": "fixtures/sample_project/.env",
-        "total_findings": 3
-      },
-      {
-        "file": "fixtures/sample_project/services.py",
-        "total_findings": 3
-      }
-    ],
-    "sample_project/templates": [
-      {
-        "file": "fixtures/sample_project/templates/index.html",
-        "total_findings": 1
       }
     ],
     "advanced_project/src/nested": [

@@ -55,7 +55,7 @@ class OllamaLLM:
         self,
         model: Optional[str] = None,
         host: Optional[str] = None,
-        n_ctx: int = 0,
+        n_ctx: int = 1024,
         n_gpu_layers: int = 0,
         **kwargs: Any,
     ) -> None:
@@ -108,8 +108,6 @@ class OllamaLLM:
         mp = (model_path or "").lower()
         if "gemma" in mp:
             return "gemma"
-        if "qwen2" in mp:
-            return "qwen2"
         if "qwen" in mp:
             return "qwen"
         return None
@@ -121,7 +119,7 @@ class OllamaLLM:
                 "role": "user",
                 "content": (
                     f"FILE TYPE: {language}\n"
-                    f"SECRET: {raw_secret}\n"
+                    f"SECRET: `{raw_secret}`\n"
                     f"CONTEXT:\n```\n{context_snippet}\n```\n"
                     "If there is a secret ONLY reply with a JSON using these keys: SECRET, type, username (optional), usage, reasoning, file location. Else reply with \{n/a\} only."
                 ),
