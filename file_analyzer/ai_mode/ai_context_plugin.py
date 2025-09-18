@@ -47,7 +47,7 @@ class OllamaLLM:
     """Thin wrapper that now routes classification through ``llama.cpp`` instead of Ollama."""
 
     SYSTEM_PROMPT = (
-        "You classify potential security secrets. Read the value and context and decide if it is a real secret. Respond with JSON containing keys: secret, type, username (optional), usage, reasoning, file_location. If it is not a secret, reply with {} only."
+        "You classify potential security secrets. Read the value and context and decide if it is a real secret (plain text, hashed, or encrypted). Respond with JSON containing keys: secret, type, username (optional), usage, reasoning, file_location. If it is not a secret, reply with {} only."
 
     )
 
@@ -59,7 +59,7 @@ class OllamaLLM:
         n_gpu_layers: int = 0,
         **kwargs: Any,
     ) -> None:
-        default_model = os.environ["LLAMA_MODEL"],
+        default_model = os.environ["LLAMA_MODEL"]
         self.model = model or default_model
         self.host = host  # preserved for API compatibility
         try:
@@ -69,6 +69,11 @@ class OllamaLLM:
                 "llama-cpp-python is required but not installed. "
                 "Install with: pip install --upgrade llama-cpp-python"
             ) from exc
+
+        # Respect explicit chat_format if caller provided, else infer from model path
+        chat_format = kwargs.pop("chat_format", None)
+        if not chat_format:
+            chat_format = self._infer_chat_format(self.model)
 
         n_threads = kwargs.pop("n_threads", None)
         if not isinstance(n_threads, int) or n_threads <= 0:
@@ -84,11 +89,30 @@ class OllamaLLM:
             flash_attn=kwargs.pop("flash_attn", True),  # try both True/False and keep what's faster on your CPU
             n_threads=n_threads,
             offload_kqv=kwargs.pop("offload_kqv", False),  # CPU only
+            chat_format=chat_format,
             verbose=False,
             **kwargs,
         )
         self.last_usage: Dict[str, Any] = {}
         self.last_timings: Dict[str, Any] = {}
+
+    @staticmethod
+    def _infer_chat_format(model_path: str) -> Optional[str]:
+        """Infer llama.cpp chat format from the model path.
+
+        - If path contains 'gemma', enforce 'gemma' format
+        - If path contains 'qwen2', enforce 'qwen2'
+        - Else if contains 'qwen', enforce 'qwen'
+        Returns None if no specific format inferred.
+        """
+        mp = (model_path or "").lower()
+        if "gemma" in mp:
+            return "gemma"
+        if "qwen2" in mp:
+            return "qwen2"
+        if "qwen" in mp:
+            return "qwen"
+        return None
 
     def build_messages(self, raw_secret: str, language: str, context_snippet: str) -> List[Dict[str, str]]:
         return [
@@ -431,6 +455,16 @@ class SecretsContextPlugin(AnalyzerPlugin):
             stats["llm_max_seconds"] = round(llm_max_latency, 3)
 
         stats["llm_usage"] = self._summarize_llm_usage()
+        # Convenience roll-ups for easy display/consumption
+        llm_normal = stats["llm_usage"].get("normal", {}) if isinstance(stats.get("llm_usage"), dict) else {}
+        if llm_attempts > 0 and isinstance(llm_normal, dict):
+            stats["llm_tokens_per_second"] = llm_normal.get("tokens_per_second", 0.0)
+            stats["llm_prompt_eval_seconds"] = llm_normal.get("prompt_eval_seconds", 0.0)
+            stats["llm_completion_eval_seconds"] = llm_normal.get("completion_eval_seconds", 0.0)
+            stats["llm_prompt_tokens_per_second"] = llm_normal.get("prompt_tokens_per_second", 0.0)
+            stats["llm_completion_tokens_per_second"] = llm_normal.get(
+                "completion_tokens_per_second", 0.0
+            )
 
         stats_message = (
             "Secrets enrichment stats | total=%d | processed=%d | failures=%d | llm=%d/%d | duration=%.2fs"
@@ -441,6 +475,18 @@ class SecretsContextPlugin(AnalyzerPlugin):
                 llm_total_latency,
                 stats["llm_avg_seconds"],
             )
+            # Add token and timing rates for quick visibility
+            tps = float(stats.get("llm_tokens_per_second") or 0.0)
+            ptps = float(stats.get("llm_prompt_tokens_per_second") or 0.0)
+            ctps = float(stats.get("llm_completion_tokens_per_second") or 0.0)
+            if tps:
+                stats_message += " | tok/s=%.1f" % tps
+            if ptps or ctps:
+                stats_message += " | prompt_tok/s=%.1f completion_tok/s=%.1f" % (ptps, ctps)
+            pe = float(stats.get("llm_prompt_eval_seconds") or 0.0)
+            ce = float(stats.get("llm_completion_eval_seconds") or 0.0)
+            # Always show eval times even if backend didn't provide them
+            stats_message += " | prompt_eval=%.2fs completion_eval=%.2fs" % (pe, ce)
         if preview_limit_reached:
             stats_message += f" | preview_limit={target_items}"
         logger.info(stats_message)
@@ -823,11 +869,22 @@ class SecretsContextPlugin(AnalyzerPlugin):
                     or (prompt_tokens + completion_tokens)
                 )
             prompt_eval_seconds = 0.0
+            completion_eval_seconds = 0.0
+            completion_tokens_per_second = 0.0
             if isinstance(timings_payload, dict):
                 prompt_eval_ms = timings_payload.get("prompt_eval_time") or 0.0
                 prompt_eval_seconds = max(float(prompt_eval_ms) / 1000.0, 0.0)
                 if prompt_tokens and prompt_eval_seconds > 0:
                     prompt_tokens_per_second = prompt_tokens / prompt_eval_seconds
+                # Completion timings/rate if provided by backend
+                completion_eval_ms = (
+                    timings_payload.get("predicted_eval_time")
+                    or timings_payload.get("eval_time")
+                    or 0.0
+                )
+                completion_eval_seconds = max(float(completion_eval_ms) / 1000.0, 0.0)
+                if completion_tokens and completion_eval_seconds > 0:
+                    completion_tokens_per_second = completion_tokens / completion_eval_seconds
             print("-- Token Statistics --", file=sys.stderr)
             print(
                 f"prompt_tokens={prompt_tokens} | completion_tokens={completion_tokens} | total_tokens={total_tokens}",
@@ -842,6 +899,19 @@ class SecretsContextPlugin(AnalyzerPlugin):
                 reason = "timing unavailable" if prompt_eval_seconds == 0.0 else "no prompt tokens"
                 print(
                     f"prompt_tokens_per_second=N/A ({reason})",
+                    file=sys.stderr,
+                )
+            if completion_tokens_per_second:
+                print(
+                    f"completion_tokens_per_second={completion_tokens_per_second:.3f} (over {completion_eval_seconds:.3f}s)",
+                    file=sys.stderr,
+                )
+            else:
+                reason = (
+                    "timing unavailable" if completion_eval_seconds == 0.0 else "no completion tokens"
+                )
+                print(
+                    f"completion_tokens_per_second=N/A ({reason})",
                     file=sys.stderr,
                 )
             print("=" * 40, file=sys.stderr)

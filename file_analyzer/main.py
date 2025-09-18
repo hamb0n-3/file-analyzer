@@ -1161,11 +1161,13 @@ def main():
         # bridge: map to legacy --dir
         setattr(args, 'dir', args.path)
         files_to_analyze = get_files_to_analyze(args)
+        if not getattr(args, 'recursive', False) and not getattr(args, 'quiet', False):
+            print(f"{colors['yellow']('Reminder:')} use -r/--recursive to include subdirectories in the scan.")
     else:
         # Backward-compatible path
         mode = 'file' if args.file_paths else ('dir' if args.dir else None)
         files_to_analyze = get_files_to_analyze(args)
-    
+
     if not files_to_analyze:
         print(f"{colors['red']('Error: No files specified or found for analysis')}")
         print(f"Run with --help for usage information")

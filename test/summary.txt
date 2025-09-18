@@ -1,0 +1,22 @@
+Directory Summary
+Files (with findings): 10  Findings: 22  Generated: 2025-09-17 16:36:14  Scope: fixtures  Plugins: secrets
+
+advanced_project/src  total: 2
+  - fixtures/advanced_project/src/api_client.js  findings: 1
+  - fixtures/advanced_project/src/helper.py  findings: 1
+
+advanced_project/src/nested  total: 2
+  - fixtures/advanced_project/src/nested/secrets.txt  findings: 2
+
+advanced_project/src/tests  total: 2
+  - fixtures/advanced_project/src/tests/test_placeholder.py  findings: 2
+
+sample_project  total: 15
+  - fixtures/sample_project/.env  findings: 3
+  - fixtures/sample_project/app.py  findings: 5
+  - fixtures/sample_project/config.ini  findings: 3
+  - fixtures/sample_project/services.py  findings: 3
+  - fixtures/sample_project/settings.yaml  findings: 1
+
+sample_project/templates  total: 1
+  - fixtures/sample_project/templates/index.html  findings: 1

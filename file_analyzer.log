@@ -1,0 +1,36 @@
+2025-09-17 16:26:18,725 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:26:18,725 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:27:23,765 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:27:43,788 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:27:57,387 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:28:07,464 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:28:56,281 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:29:08,835 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:29:08,846 - INFO - root - Wrote secrets manifest: test_seq/secrets.json
+2025-09-17 16:29:08,846 - INFO - root - Wrote summary JSON: test_seq/summary.json
+2025-09-17 16:29:08,847 - INFO - root - Wrote summary text: test_seq/summary.txt
+2025-09-17 16:29:08,847 - INFO - root - Wrote aggregated plugin JSON: test_seq/plugins-output.json
+2025-09-17 16:29:21,446 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:29:26,037 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:29:40,614 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:29:52,748 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:29:52,759 - INFO - root - Wrote secrets manifest: test_seq/secrets.json
+2025-09-17 16:29:52,759 - INFO - root - Wrote summary JSON: test_seq/summary.json
+2025-09-17 16:29:52,759 - INFO - root - Wrote summary text: test_seq/summary.txt
+2025-09-17 16:29:52,759 - INFO - root - Wrote aggregated plugin JSON: test_seq/plugins-output.json
+2025-09-17 16:30:35,968 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:30:42,834 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:12,959 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,203 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,203 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,206 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,206 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,214 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,216 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,217 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,219 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,223 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,223 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,223 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,224 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-17 16:32:25,226 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'

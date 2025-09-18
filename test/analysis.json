@@ -1,0 +1,219 @@
+{
+  "results": [
+    {
+      "secret": "Bearer ADV_PROJ_KEY_987654",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/advanced_project/src/api_client.js:9:25"
+    },
+    {
+      "secret": "yaml-secret-456",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/settings.yaml:3:16"
+    },
+    {
+      "secret": "fixture-refresh-token",
+      "type": "",
+      "usage": "",
+      "reasoning": "This is a file containing a secret token. It is likely a temporary storage location for sensitive data.",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:8:17"
+    },
+    {
+      "secret": "hardcoded-token",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:12:18"
+    },
+    {
+      "secret": "env-secret-789",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/.env:1:12"
+    },
+    {
+      "secret": "adv-helper-token-xyz",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/advanced_project/src/helper.py:6:18"
+    },
+    {
+      "secret": "QWxhZGRpbjpPcGVuU2VzYW1l",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/advanced_project/src/nested/secrets.txt:4:8"
+    },
+    {
+      "secret": "os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:15:13"
+    },
+    {
+      "secret": "test-only-secret",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/advanced_project/src/tests/test_placeholder.py:4:11"
+    },
+    {
+      "secret": "fixture-client-secret",
+      "type": "secret",
+      "usage": "fixture-client-id",
+      "reasoning": "This is a secret, and it's only available for the specified client ID.",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:7:17",
+      "username": "sample"
+    },
+    {
+      "secret": "db-pass-123",
+      "type": "secret",
+      "usage": "fixture-client-secret",
+      "reasoning": "This is a secret that is only available through the fixture-client-secret pool.",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/config.ini:11:27",
+      "username": "client_secret"
+    },
+    {
+      "secret": "ZZZ_SUPER_SECRET",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:10:12"
+    },
+    {
+      "secret": "{DB_PASSWORD}",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:21:34"
+    },
+    {
+      "secret": "fixture-service-secret",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/.env:2:20"
+    },
+    {
+      "secret": "fixture-password-321",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/.env:4:9"
+    },
+    {
+      "secret": "adv-secret-001",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/advanced_project/src/nested/secrets.txt:1:12"
+    },
+    {
+      "secret": "oauth-client-secret-abc",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:11:24"
+    },
+    {
+      "secret": "svc-key-555",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/services.py:10:20"
+    },
+    {
+      "secret": "SECRET = \"test-only-secret\"",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/advanced_project/src/tests/test_placeholder.py:4:1"
+    },
+    {
+      "secret": "secret=\"fixture-html-secret\"",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/templates/index.html:10:13"
+    },
+    {
+      "secret": "API_KEY = \"ZZZ_SUPER_SECRET\"",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:10:1"
+    },
+    {
+      "secret": "db-pass-123",
+      "type": "",
+      "usage": "",
+      "reasoning": "",
+      "file location": "/Users/tristan/AI/Scripts/Red/file-analyzer/test/fixtures/sample_project/app.py:11:16"
+    }
+  ],
+  "runs": {
+    "generated_at": "2025-09-18T00:19:20Z",
+    "plugin": "SecretsContextPlugin",
+    "inputs": {
+      "manifest_path": "secrets.json"
+    },
+    "statistics": {
+      "total_secrets": 22,
+      "target_secrets": 22,
+      "attempted": 22,
+      "processed": 22,
+      "failures": 0,
+      "llm_attempts": 22,
+      "llm_successes": 3,
+      "llm_failures": 19,
+      "llm_skipped": 0,
+      "duration_seconds": 29.953,
+      "llm_total_seconds": 29.941,
+      "file_cache_hits": 12,
+      "file_cache_misses": 10,
+      "cached_files": 10,
+      "secrets_per_second": 0.734,
+      "llm_avg_seconds": 1.361,
+      "llm_max_seconds": 5.539,
+      "llm_usage": {
+        "normal": {
+          "calls": 22,
+          "total_seconds": 29.941,
+          "average_seconds": 1.361,
+          "prompt_tokens": 3501,
+          "completion_tokens": 4181,
+          "total_tokens": 7682,
+          "tokens_per_second": 256.575,
+          "prompt_eval_seconds": 0.0,
+          "prompt_tokens_per_second": 116.932,
+          "completion_eval_seconds": 0.0,
+          "completion_tokens_per_second": 139.644
+        },
+        "preview": {
+          "calls": 0,
+          "total_seconds": 0.0,
+          "average_seconds": 0.0,
+          "prompt_tokens": 0,
+          "completion_tokens": 0,
+          "total_tokens": 0,
+          "tokens_per_second": 0.0,
+          "prompt_eval_seconds": 0.0,
+          "prompt_tokens_per_second": 0.0,
+          "completion_eval_seconds": 0.0,
+          "completion_tokens_per_second": 0.0
+        }
+      },
+      "llm_tokens_per_second": 256.575,
+      "llm_prompt_eval_seconds": 0.0,
+      "llm_completion_eval_seconds": 0.0,
+      "llm_prompt_tokens_per_second": 116.932,
+      "llm_completion_tokens_per_second": 139.644
+    }
+  }
+}
