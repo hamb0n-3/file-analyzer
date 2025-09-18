@@ -1,4 +1,21 @@
-Directory Summary
-Files (with findings): 0  Findings: 0  Generated: 2025-09-18 11:29:12  Scope: fixtures  Plugins: secrets
+==============================================================================
+                          Scan Intelligence Summary                           
+==============================================================================
 
-No files with findings detected.
+Scan Snapshot
+-------------
+  - Generated        : 2025-09-18 13:38:48
+  - Scope            : fixtures
+  - Plugin Selection : secrets
+  - Notes            : N/A
+
+Key Metrics
+-----------
+  - Files analyzed        : 19
+  - Files with findings   : 0
+  - Affected directories  : 0
+  - Total findings        : 0
+  - Avg findings per file : 0.00
+  - Primary hotspot       : N/A
+
+No findings detected. Your project is looking sharp!

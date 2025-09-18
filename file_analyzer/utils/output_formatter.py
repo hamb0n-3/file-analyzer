@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Output formatting utilities
 
-from typing import Dict, Set, Any, List, Optional, Tuple
+from typing import Dict, Set, Any, List, Optional, Tuple, Iterable
 import json
 import os
 import time
@@ -445,66 +445,143 @@ def aggregated_payload_to_results(aggregated: Dict[str, Any]) -> Dict[str, Any]:
 
 def format_dir_summary(all_results: Dict[str, Dict[str, Set[str]]], root: Optional[Path] = None,
                        colors: Optional[Dict] = None, *, metadata: Optional[Dict[str, Any]] = None) -> str:
-    """
-    Format a directory-grouped summary for console output.
+    """Format a rich, professional directory summary for text output."""
 
-    Args:
-        all_results: map of file path -> results
-        root: optional root path to relativize
-        colors: color functions dict
-    """
     if colors is None:
         colors = {k: lambda x: x for k in ["red", "green", "yellow", "blue", "magenta", "cyan", "bold"]}
 
-    # Group files by parent directory, ignoring files with zero findings
+    def apply_color(name: str, value: str) -> str:
+        fn = colors.get(name)
+        return fn(value) if callable(fn) else value
+
+    def display_path(path: str) -> str:
+        candidate = Path(path)
+        if root and candidate.is_absolute() and root in candidate.parents:
+            try:
+                return str(candidate.relative_to(root))
+            except Exception:
+                return path
+        return path
+
     grouped: Dict[str, List[Tuple[str, int]]] = {}
+    file_rollup: List[Tuple[str, str, int]] = []
+    total_findings = 0
     for file_path_str, res in all_results.items():
         findings = _count_findings(res)
         if findings == 0:
             continue
+        file_display = display_path(file_path_str)
         p = Path(file_path_str)
         parent = str(p.parent if root is None else p.parent.relative_to(root) if root in p.parents else p.parent)
-        grouped.setdefault(parent, []).append((file_path_str, findings))
+        grouped.setdefault(parent, []).append((file_display, findings))
+        file_rollup.append((parent, file_display, findings))
+        total_findings += findings
 
-    # Sort directories and files
-    out_lines: List[str] = []
-    out_lines.append(colors['bold']('Directory Summary'))
-    total_files = sum(len(files) for files in grouped.values())
-    total_findings = sum(cnt for files in grouped.values() for _, cnt in files)
+    total_files = len(file_rollup)
+    total_directories = len(grouped)
+    files_analyzed = len(all_results)
 
-    info_lines = [
-        f"{colors['green']('Files (with findings):')} {total_files}",
-        f"{colors['green']('Findings:')} {total_findings}",
+    width = 78
+    divider = "=" * width
+    out_lines: List[str] = [divider, apply_color('bold', 'Scan Intelligence Summary'.center(width)), divider, ""]
+
+    # Snapshot metadata block
+    meta_fields: List[Tuple[str, str]] = [
+        ("Generated", metadata.get('generated_at') if metadata else None),
+        ("Scope", (metadata or {}).get('root') or (metadata or {}).get('scan_root')),
+        ("Plugin Selection", (metadata or {}).get('plugins') or (metadata or {}).get('plugin_selection')),
+        ("Notes", (metadata or {}).get('notes')),
     ]
-    if metadata:
-        generated = metadata.get('generated_at')
-        if generated:
-            info_lines.append(f"{colors['blue']('Generated:')} {generated}")
-        root_meta = metadata.get('root') or metadata.get('scan_root')
-        if root_meta:
-            info_lines.append(f"{colors['blue']('Scope:')} {root_meta}")
-        plugin_info = metadata.get('plugins') or metadata.get('plugin_selection')
-        if plugin_info:
-            info_lines.append(f"{colors['blue']('Plugins:')} {plugin_info}")
-        extra = metadata.get('notes')
-        if extra:
-            info_lines.append(f"{colors['blue']('Notes:')} {extra}")
-    out_lines.append("  ".join(info_lines) + "\n")
+    meta_entries = [(label, value if value else 'N/A') for label, value in meta_fields]
+    label_width = max(len(label) for label, _ in meta_entries)
+    snapshot_lines = [f"  - {label:<{label_width}} : {value}" for label, value in meta_entries]
 
-    if not grouped:
-        out_lines.append(colors['yellow']('No files with findings detected.'))
-        return "\n".join(out_lines)
-
-    for d in sorted(grouped.keys()):
-        files = sorted(grouped[d], key=lambda t: t[0])
-        d_total = sum(cnt for _, cnt in files)
-        out_lines.append(f"{colors['cyan'](d)}  {colors['green']('total:')} {d_total}")
-        for fp, cnt in files:
-            rel = str(Path(fp).relative_to(root)) if root and Path(fp).is_absolute() and root in Path(fp).parents else fp
-            out_lines.append(f"  - {rel}  {colors['blue']('findings:')} {cnt}")
+    def add_section(title: str, lines: Iterable[str]) -> None:
+        section_title = apply_color('cyan', title)
+        out_lines.append(section_title)
+        out_lines.append(apply_color('cyan', '-' * len(title)))
+        had_content = False
+        for line in lines:
+            had_content = True
+            out_lines.append(line)
+        if not had_content:
+            out_lines.append("  (no data available)")
         out_lines.append("")
 
-    return "\n".join(out_lines)
+    add_section('Scan Snapshot', snapshot_lines)
+
+    # Metrics block
+    avg_findings = (total_findings / total_files) if total_files else 0.0
+    hotspot_dir = None
+    if grouped:
+        dir_totals = [
+            (directory, len(entries), sum(item[1] for item in entries))
+            for directory, entries in grouped.items()
+        ]
+        hotspot_dir = max(dir_totals, key=lambda item: item[2])
+    hotspot_desc = (
+        f"{hotspot_dir[0]} ({hotspot_dir[2]} findings across {hotspot_dir[1]} file(s))"
+        if hotspot_dir else 'N/A'
+    )
+
+    metrics: List[Tuple[str, str]] = [
+        ("Files analyzed", str(files_analyzed)),
+        ("Files with findings", str(total_files)),
+        ("Affected directories", str(total_directories)),
+        ("Total findings", str(total_findings)),
+        ("Avg findings per file", f"{avg_findings:.2f}"),
+        ("Primary hotspot", hotspot_desc),
+    ]
+    metric_label_width = max(len(label) for label, _ in metrics)
+    metric_lines = [f"  - {label:<{metric_label_width}} : {value}" for label, value in metrics]
+    add_section('Key Metrics', metric_lines)
+
+    if not grouped:
+        out_lines.append(apply_color('green', 'No findings detected. Your project is looking sharp!'))
+        return "\n".join(out_lines).rstrip() + "\n"
+
+    # Directory table
+    dir_rows = [
+        (directory, len(entries), sum(item[1] for item in entries))
+        for directory, entries in grouped.items()
+    ]
+    dir_rows.sort(key=lambda item: (-item[2], item[0]))
+
+    dir_col_width = max(len('Directory'), *(len(row[0]) for row in dir_rows))
+    dir_col_width = min(dir_col_width, 48)
+    files_col_width = max(len('Files'), *(len(str(row[1])) for row in dir_rows))
+    findings_col_width = max(len('Findings'), *(len(str(row[2])) for row in dir_rows))
+
+    def trim(value: str, max_width: int) -> str:
+        if len(value) <= max_width:
+            return value
+        return value[:max_width - 3] + '...'
+
+    border = "+-" + "-" * dir_col_width + "-+-" + "-" * files_col_width + "-+-" + "-" * findings_col_width + "-+"
+    header = f"| {'Directory':<{dir_col_width}} | {'Files':>{files_col_width}} | {'Findings':>{findings_col_width}} |"
+    table_lines = [border, header, border]
+    for directory, file_count, findings in dir_rows:
+        display_dir = trim(directory, dir_col_width)
+        row = f"| {display_dir:<{dir_col_width}} | {file_count:>{files_col_width}} | {findings:>{findings_col_width}} |"
+        table_lines.append(row)
+    table_lines.append(border)
+    add_section('Directory Breakdown', table_lines)
+
+    # Detailed per-file breakdown
+    detail_lines: List[str] = []
+    for directory, _, dir_findings in dir_rows:
+        entries = grouped[directory]
+        entries_sorted = sorted(entries, key=lambda item: (-item[1], item[0]))
+        file_label_width = min(56, max(len(item[0]) for item in entries_sorted))
+        detail_lines.append(f"{directory} :: {dir_findings} findings across {len(entries_sorted)} file(s)")
+        for file_name, count in entries_sorted:
+            file_display = trim(file_name, file_label_width)
+            detail_lines.append(f"    -> {file_display:<{file_label_width}} | {count:>3} findings")
+        detail_lines.append("")
+
+    add_section('Detailed Findings by File', detail_lines[:-1])  # drop trailing blank line
+
+    return "\n".join(out_lines).rstrip() + "\n"
 
 def create_dir_summary_html(all_results: Dict[str, Dict[str, Set[str]]], output_file: str,
                             root: Optional[Path] = None, metadata: Optional[Dict[str, Any]] = None) -> None:
