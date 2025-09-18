@@ -1,0 +1,54 @@
+2025-09-18 11:32:30,994 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-18 11:34:12,168 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-18 11:35:02,567 - DEBUG - root - Discovering plugins in file_analyzer.plugins...
+2025-09-18 11:35:02,570 - DEBUG - root - Registered JavaScriptCodeAnalyzer plugin
+2025-09-18 11:35:02,570 - DEBUG - root - Registered PythonCodeAnalyzer plugin
+2025-09-18 11:35:02,574 - DEBUG - root - Registered CryptoHashesAnalyzer plugin
+2025-09-18 11:35:02,575 - ERROR - root - Error loading plugin from file_analyzer.plugins.endpoints: unsupported operand type(s) for |: '_GenericAlias' and 'NoneType'
+2025-09-18 11:35:02,576 - DEBUG - root - Registered JSONAnalyzer plugin
+2025-09-18 11:35:02,582 - DEBUG - root - Registered SecretsAnalyzer plugin
+2025-09-18 11:35:02,582 - DEBUG - root - Registered WebAnalyzer plugin
+2025-09-18 11:35:02,584 - DEBUG - root - Registered XMLAnalyzer plugin
+2025-09-18 11:35:02,584 - DEBUG - root - Discovered 7 plugins
+2025-09-18 11:35:02,584 - DEBUG - root - Loaded 7 plugins
+2025-09-18 11:35:02,584 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,585 - DEBUG - root - Applying JSONAnalyzer plugin
+2025-09-18 11:35:02,585 - DEBUG - root - Parsing JSON content in test/fixtures/advanced_manifest.json
+2025-09-18 11:35:02,585 - DEBUG - root - Applying SecretsAnalyzer plugin
+2025-09-18 11:35:02,586 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,587 - DEBUG - root - Applying JSONAnalyzer plugin
+2025-09-18 11:35:02,587 - DEBUG - root - Parsing JSON content in test/fixtures/manifest.json
+2025-09-18 11:35:02,587 - DEBUG - root - Applying SecretsAnalyzer plugin
+2025-09-18 11:35:02,588 - DEBUG - root - Detected file type: unknown
+2025-09-18 11:35:02,589 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,590 - DEBUG - root - Applying XMLAnalyzer plugin
+2025-09-18 11:35:02,590 - DEBUG - root - Applying SecretsAnalyzer plugin
+2025-09-18 11:35:02,591 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,591 - DEBUG - root - Applying JSONAnalyzer plugin
+2025-09-18 11:35:02,591 - DEBUG - root - Parsing JSON content in test/fixtures/advanced_project/config/service.json
+2025-09-18 11:35:02,591 - DEBUG - root - Applying SecretsAnalyzer plugin
+2025-09-18 11:35:02,592 - DEBUG - root - Detected file type: unknown
+2025-09-18 11:35:02,593 - DEBUG - root - Detected file type: unknown
+2025-09-18 11:35:02,594 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,595 - DEBUG - root - Applying SecretsAnalyzer plugin
+2025-09-18 11:35:02,596 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,596 - DEBUG - root - Applying SecretsAnalyzer plugin
+2025-09-18 11:35:02,597 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,598 - DEBUG - root - Applying SecretsAnalyzer plugin
+2025-09-18 11:35:02,599 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,599 - DEBUG - root - Applying SecretsAnalyzer plugin
+2025-09-18 11:35:02,600 - DEBUG - root - Detected file type: unknown
+2025-09-18 11:35:02,601 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,601 - DEBUG - root - Applying SecretsAnalyzer plugin
+2025-09-18 11:35:02,603 - DEBUG - root - Detected file type: unknown
+2025-09-18 11:35:02,604 - DEBUG - root - Detected file type: unknown
+2025-09-18 11:35:02,605 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,605 - DEBUG - root - Applying SecretsAnalyzer plugin
+2025-09-18 11:35:02,607 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,607 - DEBUG - root - Applying SecretsAnalyzer plugin
+2025-09-18 11:35:02,608 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,609 - DEBUG - root - Applying JSONAnalyzer plugin
+2025-09-18 11:35:02,609 - DEBUG - root - Parsing JSON content in test/fixtures/sample_project/data/sample.json
+2025-09-18 11:35:02,609 - DEBUG - root - Applying SecretsAnalyzer plugin
+2025-09-18 11:35:02,610 - DEBUG - root - Detected file type: text
+2025-09-18 11:35:02,610 - DEBUG - root - Applying SecretsAnalyzer plugin

@@ -4,10 +4,11 @@
 import re
 import logging
 import ipaddress
+from bisect import bisect_right
 from urllib.parse import urlparse
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, Match, Optional, Pattern, Set
+from typing import Any, Dict, Iterable, Iterator, List, Match, Optional, Pattern, Set, Tuple
 
 from .base_plugin import AnalyzerPlugin
 
@@ -180,48 +181,114 @@ class EndpointsAnalyzer(AnalyzerPlugin):
 
     def analyze(self, file_path: Path, file_type: str, content: str, results: Dict[str, Set[str]]) -> Dict[str, Set[str]]:
         logging.debug(f"Analyzing endpoints information in {file_path}")
-        self._extract_ips_domains_urls(content, results)
-        self._analyze_network_protocols(content, results)
-        self._analyze_network_security_issues(content, results)
-        self._extract_network_configuration(content, results)
-        self._correlate_network_endpoints(content, results)
+        line_starts, lines = self._prepare_line_index(content)
+        self._extract_ips_domains_urls(content, results, file_path, line_starts, lines)
+        self._analyze_network_protocols(content, results, file_path, line_starts, lines)
+        self._analyze_network_security_issues(content, results, file_path, line_starts, lines)
+        self._extract_network_configuration(content, results, file_path, line_starts, lines)
+        self._correlate_network_endpoints(content, results, file_path, line_starts, lines)
         return results
 
-    def _extract_ips_domains_urls(self, content: str, results: Dict[str, Set[str]]) -> None:
+    def _extract_ips_domains_urls(
+        self,
+        content: str,
+        results: Dict[str, Set[str]],
+        file_path: Path,
+        line_starts: List[int],
+        lines: List[str],
+    ) -> None:
         for pattern, match in iter_endpoint_matches(content, self.endpoint_patterns):
             try:
                 value = match.group(pattern.value_group)
+                start_pos = match.start(pattern.value_group)
             except IndexError:
                 value = match.group(0)
+                start_pos = match.start()
             if pattern.result_key == 'ipv4' and self._skip_ipv4_candidate(value):
                 continue
             if pattern.result_key == 'domain_keywords' and self._skip_domain_candidate(value):
                 continue
             if pattern.result_key == 'url' and self._skip_url_candidate(value):
                 continue
-            results.setdefault(pattern.result_key, set()).add(value)
+            self._record_detection(
+                results,
+                pattern.result_key,
+                value,
+                file_path=file_path,
+                line_starts=line_starts,
+                lines=lines,
+                position=start_pos,
+            )
         # MAC addresses
         mac_re = r'\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b'
         for m in re.finditer(mac_re, content):
             mac = m.group(0)
             if self._skip_mac_candidate(mac):
                 continue
-            results.setdefault('mac_address', set()).add(mac)
+            self._record_detection(
+                results,
+                'mac_address',
+                mac,
+                file_path=file_path,
+                line_starts=line_starts,
+                lines=lines,
+                position=m.start(),
+            )
 
-    def _analyze_network_protocols(self, content: str, results: Dict[str, Set[str]]) -> None:
+    def _analyze_network_protocols(
+        self,
+        content: str,
+        results: Dict[str, Set[str]],
+        file_path: Path,
+        line_starts: List[int],
+        lines: List[str],
+    ) -> None:
         for protocol, pattern in self.network_patterns.get('protocols', {}).items():
-            if re.search(pattern, content):
-                results.setdefault('network_protocols', set()).add(protocol)
+            match = next(re.finditer(pattern, content), None)
+            if not match:
+                continue
+            self._record_detection(
+                results,
+                'network_protocols',
+                protocol,
+                file_path=file_path,
+                line_starts=line_starts,
+                lines=lines,
+                position=match.start(),
+            )
 
-    def _analyze_network_security_issues(self, content: str, results: Dict[str, Set[str]]) -> None:
+    def _analyze_network_security_issues(
+        self,
+        content: str,
+        results: Dict[str, Set[str]],
+        file_path: Path,
+        line_starts: List[int],
+        lines: List[str],
+    ) -> None:
         for issue, pattern in self.network_patterns.get('security_issues', {}).items():
-            matches = re.finditer(pattern, content)
-            for match in matches:
-                line_no = content[:match.start()].count('\n') + 1
-                context = content[max(0, match.start() - 20):min(len(content), match.end() + 20)].strip()
-                results.setdefault('network_security_issues', set()).add(f"{issue} (line {line_no}): {context}")
+            for match in re.finditer(pattern, content):
+                line_no = self._line_from_position(match.start(), line_starts)
+                context_line = self._line_text(line_no, lines)
+                value = f"{issue} (line {line_no}): {content[max(0, match.start() - 20):min(len(content), match.end() + 20)].strip()}"
+                self._record_detection(
+                    results,
+                    'network_security_issues',
+                    value,
+                    file_path=file_path,
+                    line_starts=line_starts,
+                    lines=lines,
+                    line_num=line_no,
+                    context=context_line,
+                )
 
-    def _extract_network_configuration(self, content: str, results: Dict[str, Set[str]]) -> None:
+    def _extract_network_configuration(
+        self,
+        content: str,
+        results: Dict[str, Set[str]],
+        file_path: Path,
+        line_starts: List[int],
+        lines: List[str],
+    ) -> None:
         if 'port' in self.network_patterns.get('configuration', {}):
             port_pattern = self.network_patterns['configuration']['port']
             for match in re.finditer(port_pattern, content):
@@ -229,12 +296,30 @@ class EndpointsAnalyzer(AnalyzerPlugin):
                 try:
                     port_number = int(port)
                     if 0 <= port_number <= 65535:
-                        results.setdefault('network_ports', set()).add(port)
+                        self._record_detection(
+                            results,
+                            'network_ports',
+                            port,
+                            file_path=file_path,
+                            line_starts=line_starts,
+                            lines=lines,
+                            position=match.start(1),
+                        )
                         sensitive_ports = {21, 22, 23, 25, 445, 1433, 3306, 3389, 5432, 27017}
                         if port_number in sensitive_ports:
                             service = self._get_port_service(port_number)
-                            results.setdefault('network_security_issues', set()).add(
-                                f"Potentially sensitive port used: {port} (common for {service})"
+                            issue_value = f"Potentially sensitive port used: {port} (common for {service})"
+                            line_no = self._line_from_position(match.start(1), line_starts)
+                            context_line = self._line_text(line_no, lines)
+                            self._record_detection(
+                                results,
+                                'network_security_issues',
+                                issue_value,
+                                file_path=file_path,
+                                line_starts=line_starts,
+                                lines=lines,
+                                line_num=line_no,
+                                context=context_line,
                             )
                 except ValueError:
                     continue
@@ -242,11 +327,38 @@ class EndpointsAnalyzer(AnalyzerPlugin):
             host_pattern = self.network_patterns['configuration']['host']
             for match in re.finditer(host_pattern, content):
                 host = match.group(1)
-                results.setdefault('network_hosts', set()).add(host)
+                self._record_detection(
+                    results,
+                    'network_hosts',
+                    host,
+                    file_path=file_path,
+                    line_starts=line_starts,
+                    lines=lines,
+                    position=match.start(1),
+                )
                 if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', host) and not host.startswith(('127.', '192.168.', '10.')):
-                    results.setdefault('network_security_issues', set()).add(f"Hardcoded non-local IP address: {host}")
+                    line_no = self._line_from_position(match.start(1), line_starts)
+                    context_line = self._line_text(line_no, lines)
+                    issue_value = f"Hardcoded non-local IP address: {host}"
+                    self._record_detection(
+                        results,
+                        'network_security_issues',
+                        issue_value,
+                        file_path=file_path,
+                        line_starts=line_starts,
+                        lines=lines,
+                        line_num=line_no,
+                        context=context_line,
+                    )
 
-    def _correlate_network_endpoints(self, content: str, results: Dict[str, Set[str]]) -> None:
+    def _correlate_network_endpoints(
+        self,
+        content: str,
+        results: Dict[str, Set[str]],
+        file_path: Path,
+        line_starts: List[int],
+        lines: List[str],
+    ) -> None:
         hosts = list(results.get('network_hosts', set()) or [])
         ports = list(results.get('network_ports', set()) or [])
         if not hosts or not ports:
@@ -262,13 +374,45 @@ class EndpointsAnalyzer(AnalyzerPlugin):
                 if pairs_checked >= max_pairs:
                     return
                 pairs_checked += 1
-                if f"{host}:{port}" in content:
-                    endpoints.add(f"{host}:{port}")
+                endpoint = f"{host}:{port}"
+                position = content.find(endpoint)
+                if position != -1:
+                    endpoints.add(endpoint)
+                    line_no = self._line_from_position(position, line_starts)
+                    context_line = self._line_text(line_no, lines)
+                    self._record_detection(
+                        results,
+                        'network_endpoints',
+                        endpoint,
+                        file_path=file_path,
+                        line_starts=line_starts,
+                        lines=lines,
+                        line_num=line_no,
+                        context=context_line,
+                    )
+                    continue
                 # Only fall back to regex when content is reasonably small
                 elif len(content) <= 200_000:
                     try:
-                        if re.search(rf'{re.escape(host)}.*?{port}|{port}.*?{re.escape(host)}', content, re.DOTALL):
-                            endpoints.add(f"{host}:{port}")
+                        match = re.search(
+                            rf'{re.escape(host)}.*?{port}|{port}.*?{re.escape(host)}',
+                            content,
+                            re.DOTALL,
+                        )
+                        if match:
+                            endpoints.add(endpoint)
+                            line_no = self._line_from_position(match.start(), line_starts)
+                            context_line = self._line_text(line_no, lines)
+                            self._record_detection(
+                                results,
+                                'network_endpoints',
+                                endpoint,
+                                file_path=file_path,
+                                line_starts=line_starts,
+                                lines=lines,
+                                line_num=line_no,
+                                context=context_line,
+                            )
                     except re.error:
                         # Ignore malformed host/port patterns in regex context
                         pass
@@ -328,3 +472,82 @@ class EndpointsAnalyzer(AnalyzerPlugin):
             27017: "MongoDB"
         }
         return common_ports.get(port, "Unknown Service")
+
+    def _prepare_line_index(self, content: str) -> Tuple[List[int], List[str]]:
+        line_starts: List[int] = []
+        lines: List[str] = []
+        offset = 0
+        for raw_line in content.splitlines(True):
+            line_starts.append(offset)
+            lines.append(raw_line.rstrip('\r\n'))
+            offset += len(raw_line)
+        if not line_starts:
+            line_starts = [0]
+        if not lines and content:
+            lines.append(content.rstrip('\r\n'))
+        return line_starts, lines
+
+    def _line_from_position(self, position: int, line_starts: List[int]) -> int:
+        index = bisect_right(line_starts, position) - 1
+        if index < 0:
+            index = 0
+        return index + 1
+
+    def _line_text(self, line_num: int, lines: List[str]) -> Optional[str]:
+        if line_num <= 0:
+            return None
+        idx = line_num - 1
+        if 0 <= idx < len(lines):
+            return lines[idx]
+        return None
+
+    def _record_detection(
+        self,
+        results: Dict[str, Set[str]],
+        dtype: str,
+        value: str,
+        *,
+        file_path: Path,
+        line_starts: List[int],
+        lines: List[str],
+        position: Optional[int] = None,
+        line_num: Optional[int] = None,
+        context: Optional[str] = None,
+    ) -> None:
+        bucket = results.setdefault(dtype, set())
+        bucket.add(value)
+
+        if line_num is None and position is not None:
+            line_num = self._line_from_position(position, line_starts)
+        if context is None and line_num is not None:
+            context = self._line_text(line_num, lines)
+
+        meta_container = results.setdefault('__meta__', {})
+        if not isinstance(meta_container, dict):
+            logging.warning("__meta__ container has unexpected type for endpoints plugin: %s", type(meta_container))
+            return
+        entries = meta_container.setdefault(dtype, [])
+        if not isinstance(entries, list):
+            logging.warning("Metadata bucket has unexpected type for %s: %s", dtype, type(entries))
+            return
+
+        record: Dict[str, Any] = {
+            'value': value,
+            'file': str(file_path),
+        }
+        if line_num is not None:
+            record['line_num'] = line_num
+        if context is not None:
+            record['context'] = context
+
+        for existing in entries:
+            if (
+                existing.get('value') == record['value']
+                and existing.get('file') == record['file']
+                and existing.get('line_num') == record.get('line_num')
+            ):
+                if context is not None and not existing.get('context'):
+                    existing['context'] = context
+                return
+
+        entries.append(record)

@@ -623,12 +623,16 @@ def _format_plugin_text(plugin_name: str, results: Dict[str, Any], *,
                     continue
                 used_values.add(value)
                 location = entry.get('file') or "unknown"
-                if entry.get('line') is not None:
-                    location = f"{location}:{entry['line']}"
+                line_num = entry.get('line_num')
+                if line_num is None and entry.get('line') is not None:
+                    line_num = entry.get('line')
+                if line_num is not None:
+                    location = f"{location}:{line_num}"
                 lines.append(f"  - value: {value}")
                 lines.append(f"    location: {location}")
-                if entry.get('username'):
-                    lines.append(f"    possible owner: {entry['username']}")
+                context = entry.get('context')
+                if context:
+                    lines.append(f"    context: {context}")
         for value in values:
             if value in used_values:
                 continue
@@ -668,9 +672,20 @@ def _normalize_plugin_bucket(aggregated: Dict[str, Any]) -> Tuple[Dict[str, List
             if not isinstance(item, dict):
                 continue
             cleaned_entry: Dict[str, Any] = {}
-            for key in ('value', 'file', 'line', 'username', 'context'):
-                if key in item and item[key] is not None:
-                    cleaned_entry[key] = item[key]
+            value = item.get('value')
+            if value is not None:
+                cleaned_entry['value'] = value
+            file_path = item.get('file')
+            if file_path is not None:
+                cleaned_entry['file'] = file_path
+            line_value = item.get('line_num')
+            if line_value is None:
+                line_value = item.get('line')
+            if isinstance(line_value, int):
+                cleaned_entry['line_num'] = line_value
+            context_value = item.get('context')
+            if context_value:
+                cleaned_entry['context'] = context_value
             if cleaned_entry:
                 cleaned_items.append(cleaned_entry)
                 value = cleaned_entry.get('value')
@@ -720,12 +735,16 @@ def _format_aggregated_plugins_text(plugin_buckets: Optional[Dict[str, Any]], *,
                 if value is not None:
                     used.add(str(value))
                 location = record.get('file') or 'unknown'
-                if record.get('line') is not None:
-                    location = f"{location}:{record['line']}"
+                line_num = record.get('line_num')
+                if line_num is None and record.get('line') is not None:
+                    line_num = record.get('line')
+                if line_num is not None:
+                    location = f"{location}:{line_num}"
                 detail_value = value if value is not None else '<value>'
                 detail = f"    - {detail_value} ({location})"
-                if record.get('username'):
-                    detail += f" [possible owner: {record['username']}]"
+                context = record.get('context')
+                if context:
+                    detail += f" :: {context}"
                 lines.append(detail)
             for value in values:
                 if str(value) in used:
@@ -821,10 +840,11 @@ def _collect_secret_entries(plugin_buckets: Optional[Dict[str, Any]]) -> List[Di
             file_path = item.get('file')
             if not value or not file_path:
                 continue
-            line = item.get('line')
-            username = item.get('username')
+            line_num = item.get('line_num')
+            if line_num is None and item.get('line') is not None:
+                line_num = item.get('line')
             context = item.get('context')
-            identity_source = f"{category}|{file_path}|{line or ''}|{value}"
+            identity_source = f"{category}|{file_path}|{line_num or ''}|{value}"
             digest = hashlib.sha256(identity_source.encode('utf-8', errors='ignore')).hexdigest()
             if digest in seen:
                 continue
@@ -835,10 +855,8 @@ def _collect_secret_entries(plugin_buckets: Optional[Dict[str, Any]]) -> List[Di
                 'value': value,
                 'category': category,
             }
-            if line is not None:
-                record['line'] = line
-            if username:
-                record['username'] = username
+            if line_num is not None:
+                record['line_num'] = line_num
             if context:
                 record['context'] = context
             entries.append(record)
@@ -890,9 +908,15 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
                 continue
             record = dict(entry)
             record.setdefault('file', file_path_str)
+            if isinstance(record.get('line_num'), int):
+                line_marker = record.get('line_num')
+            elif isinstance(record.get('line'), int):
+                line_marker = record.get('line')
+            else:
+                line_marker = None
             key = (
                 record.get('file') or file_path_str,
-                record.get('line') if isinstance(record.get('line'), int) else None,
+                line_marker,
                 record.get('original_base64'),
             )
             if not record.get('original_base64') or key in base64_seen:
@@ -931,9 +955,16 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
     if not dir_scan:
         try:
             if base64_records:
+                def _line_sort(record: Dict[str, Any]) -> int:
+                    if isinstance(record.get('line_num'), int):
+                        return record['line_num']
+                    if isinstance(record.get('line'), int):
+                        return record['line']
+                    return -1
+
                 base64_records.sort(key=lambda item: (
                     item.get('file', ''),
-                    item.get('line', -1) if isinstance(item.get('line'), int) else -1,
+                    _line_sort(item),
                     item.get('original_base64', '')
                 ))
                 base64_payload = {

@@ -1,2 +1,0 @@
-[console_scripts]
-file-analyzer = file_analyzer.main:main

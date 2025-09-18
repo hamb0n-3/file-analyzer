@@ -68,6 +68,32 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Pattern, Sequence, Set, Tuple, Callable
 
+# ---- Tunable settings (move most knobs here) --------------------------------
+# Confidence threshold: findings with confidence below this are not reported.
+MIN_CONFIDENCE: float = 0.58
+
+# Env assignment detector thresholds
+ENV_MIN_VALUE_LEN: int = 4
+ENV_MIN_ENTROPY: float = 3.2  # bits/char, only for values >= 12 chars
+
+# Embedded base64 scanning controls
+EMBEDDED_B64_MAX_DECODE: int = 6
+INNER_SCAN_KEYWORDS: Tuple[str, ...] = (
+    "secret", "token", "password", "apikey", "api_key", "access_key",
+    "private key", "AKIA", "sk_live", "ghp_", "glpat-", "xoxb-",
+)
+
+# Noise hints (if these appear near a match, it's likely a false positive)
+NOISE_HINTS: Tuple[str, ...] = (
+    "example", "sample", "dummy", "fixture", "test", "testing",
+    "placeholder", "lorem", "fake", "bogus",
+)
+
+# Defaults for Rule weighting
+DEFAULT_CTX_BOOST: float = 0.05
+DEFAULT_BASE_WEIGHT: float = 0.55
+# -----------------------------------------------------------------------------
+
 # ---- Optional project integration (AnalyzerPlugin) ---------------------------
 try:
     # If your project exposes AnalyzerPlugin, we'll use it. Otherwise we run standalone.
@@ -164,11 +190,50 @@ class Rule:
         "secret", "token", "password", "passwd", "pwd", "auth", "apikey",
         "api_key", "access_key", "private", "key", "client_secret", "credential",
     )
-    ctx_boost: float = 0.05  # add to confidence if keyword nearby
-    base_weight: float = 0.55  # starting confidence for a direct hit
+    ctx_boost: float = DEFAULT_CTX_BOOST  # add to confidence if keyword nearby
+    base_weight: float = DEFAULT_BASE_WEIGHT  # starting confidence for a direct hit
     validators: Tuple[str, ...] = ()  # names of validator funcs
 
 
+
+# ---- Entropy helpers --------------------------------------------------------
+def shannon_entropy(s: str) -> float:
+    if not s:
+        return 0.0
+    import math
+    from collections import Counter
+    counts = Counter(s)
+    total = len(s)
+    return -sum((c/total) * math.log2(c/total) for c in counts.values())
+
+def high_entropy(s: str, threshold: float = ENV_MIN_ENTROPY) -> bool:
+    # Focus on alnum subset to avoid punctuation inflating entropy
+    core = re.sub(r'[^A-Za-z0-9]', '', s)
+    if len(core) < ENV_MIN_VALUE_LEN:
+        return False
+    return shannon_entropy(core) >= threshold
+
+def is_probably_secret_value(val: str) -> bool:
+    v = val.strip()
+    if len(v) < ENV_MIN_VALUE_LEN:
+        return False
+    # Ignore obvious dates and timestamps
+    if DATE_FRAGMENT_RE.search(v) or re.fullmatch(r'\d{10,}', v):
+        return False
+    # Obvious base64/hex formats
+    if re.fullmatch(r'[A-Fa-f0-9]{32,}', v):
+        return True
+    if is_base64_like(v) and len(v) >= 32:
+        return True
+    # Mixed character classes with adequate entropy
+    has_lower = bool(re.search(r'[a-z]', v))
+    has_upper = bool(re.search(r'[A-Z]', v))
+    has_digit = bool(re.search(r'\d', v))
+    has_symbol = bool(re.search(r'[^A-Za-z0-9]', v))
+    classes = sum([has_lower, has_upper, has_digit, has_symbol])
+    if classes >= 2 and high_entropy(v):
+        return True
+    return False
 # ---- Validators --------------------------------------------------------------
 
 def luhn_check(s: str) -> bool:
@@ -214,6 +279,8 @@ VALIDATORS = {
     'luhn': luhn_check,
     'jwt': jwt_check,
     'aws_secret_charset': aws_secret_charset,
+
+    'high_entropy': high_entropy,
 }
 
 RulePostFilter = Callable[[str, str, int, int, Path], bool]
@@ -604,9 +671,11 @@ class EnvAssignmentDetector(Detector):
                 continue
             key = m.group('key')
             val = (m.group('val') or "").strip().strip("'\"")
-            if len(val) < 8 or val.lower() in self.PLACEHOLDERS:
+            if len(val) < ENV_MIN_VALUE_LEN or val.lower() in self.PLACEHOLDERS:
                 continue
             if self._looks_like_path_value(val):
+                continue
+            if not is_probably_secret_value(val):
                 continue
             key_l = key.lower()
             if not any(token in key_l for token in self.SUSPICIOUS_KEYS):
@@ -656,7 +725,7 @@ class ConnectionStringDetector(Detector):
 
 class EmbeddedBase64Detector(Detector):
     name = "embedded_base64"
-    MAX_DECODE = 8  # avoid O(N^2)
+    MAX_DECODE = EMBEDDED_B64_MAX_DECODE  # avoid O(N^2)
 
     RE_B64 = _c(r"(?:(?:[A-Za-z0-9+/]{4}){8,}(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?)")
 
@@ -894,8 +963,15 @@ class SecretScanner:
                 logging.warning("Invalid baseline file, ignoring: %s", self.config.baseline_file)
 
         for f in findings:
-            if is_allowlisted_near(self._cached_file_text(f.file), f.start):
+            # Global confidence floor
+            if f.confidence < MIN_CONFIDENCE:
                 continue
+            # Nearby noise hints (docs/samples)
+            try:
+                if _has_keyword_nearby(self._cached_file_text(f.file), f.start, NOISE_HINTS, window=140):
+                    continue
+            except Exception:
+                pass
             f.redacted = f.secret
             f.fingerprint = stable_hash(f.rule_id, f.file.as_posix(), f.redacted[:32])
             if f.fingerprint in baseline:

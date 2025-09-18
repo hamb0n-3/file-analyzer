@@ -156,13 +156,20 @@ def format_results(results: Dict[str, Set[str]], api_structure: Optional[Dict] =
                     if meta_entry:
                         if meta_entry.get('file'):
                             location = meta_entry['file']
-                            if meta_entry.get('line') is not None:
-                                location = f"{location}:{meta_entry['line']}"
+                            line_num = meta_entry.get('line_num')
+                            if line_num is None and meta_entry.get('line') is not None:
+                                line_num = meta_entry.get('line')
+                            if line_num is not None:
+                                location = f"{location}:{line_num}"
                             meta_parts.append(location)
-                        elif meta_entry.get('line') is not None:
-                            meta_parts.append(f"line {meta_entry['line']}")
-                        if meta_entry.get('username'):
-                            meta_parts.append(f"user {meta_entry['username']}")
+                        else:
+                            line_num = meta_entry.get('line_num')
+                            if line_num is None and meta_entry.get('line') is not None:
+                                line_num = meta_entry.get('line')
+                            if line_num is not None:
+                                meta_parts.append(f"line {line_num}")
+                        if meta_entry.get('context'):
+                            meta_parts.append(meta_entry['context'])
                     if meta_parts:
                         display = f"{value} ({', '.join(meta_parts)})"
                     # Apply special formatting to different types of findings
@@ -326,41 +333,6 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
             return text.count('\n', 0, pos) + 1
         return None
 
-    stop_names = {"src", "app", "lib", "config", "build", "dist", "tmp", "tests", "test"}
-
-    def _guess_username(path: str, line_no: Optional[int], value: str) -> Optional[str]:
-        if line_no is None:
-            return None
-        text, lines = _load_file(path)
-        if not lines:
-            return None
-        idx = min(len(lines) - 1, max(0, line_no - 1))
-        window = range(max(0, idx - 3), min(len(lines), idx + 3))
-        patterns = [
-            r"(?i)(?:user(?:name)?|account|owner|client|service)\s*[:=]\s*['\"]([\w.@+-]{3,})",
-            r"(?i)(?:user(?:name)?|account|owner|client|service)\s*['\"]([\w.@+-]{3,})['\"]",
-            r"(?i)(?:user|account|owner|client|service)[\w\s]*is\s*['\"]([\w.@+-]{3,})['\"]",
-            r"(?i)@([\w.@+-]{3,})",
-        ]
-        for i in window:
-            line_text = lines[i]
-            for pat in patterns:
-                found = re.search(pat, line_text)
-                if found:
-                    candidate = found.group(1).strip()
-                    lower = candidate.lower()
-                    if lower and lower not in {value.lower(), 'user', 'username', 'owner'}:
-                        return candidate
-        # Comments heuristics
-        comment_pat = re.search(r'(?://|#)\s*(?:user|account|owner|service)\s*[:=]?\s*([\w.@+-]{3,})', lines[idx])
-        if comment_pat:
-            return comment_pat.group(1)
-        parts = [seg for seg in Path(path).parts if seg.lower() not in stop_names]
-        for seg in reversed(parts):
-            if re.fullmatch(r'[A-Za-z0-9_.@-]{4,}', seg) and not seg.isdigit():
-                return seg
-        return None
-
     for file_path, file_res in all_results.items():
         meta_lookup = defaultdict(list)
         for dtype, entries in file_res.get('__meta__', {}).items():
@@ -381,7 +353,7 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
             for raw_value in values:
                 value = raw_value if isinstance(raw_value, str) else str(raw_value)
                 cat_values.add(value)
-                if grp != 'secrets':
+                if grp not in {'secrets', 'endpoints'}:
                     continue
                 cat_entries = bucket.setdefault('entries', {}).setdefault(dtype, [])
                 meta_entry = None
@@ -390,26 +362,35 @@ def aggregate_results_by_plugin(all_results: Dict[str, Dict[str, Set[str]]]) -> 
                 elif (dtype, value) in meta_lookup and meta_lookup[(dtype, value)]:
                     meta_entry = meta_lookup[(dtype, value)].pop(0)
 
-                hinted_line = meta_entry.get('line') if meta_entry else None
-                username = meta_entry.get('username') if meta_entry else None
+                hinted_line = None
+                if meta_entry:
+                    hinted_line = meta_entry.get('line_num')
+                    if hinted_line is None:
+                        hinted_line = meta_entry.get('line')
                 line_number = _line_from_value(file_path, value, hinted_line)
-                if not username:
-                    username = _guess_username(file_path, line_number, value)
+                context_value: Optional[str] = None
+                if meta_entry and meta_entry.get('context'):
+                    context_value = meta_entry.get('context')
+                elif line_number is not None:
+                    _, lines = _load_file(file_path)
+                    idx = line_number - 1
+                    if 0 <= idx < len(lines):
+                        context_value = lines[idx].rstrip('\r\n')
 
                 entry = {
                     'value': value,
                     'file': file_path,
                 }
                 if line_number is not None:
-                    entry['line'] = line_number
-                if username:
-                    entry['username'] = username
+                    entry['line_num'] = line_number
+                if context_value is not None:
+                    entry['context'] = context_value
 
                 # Deduplicate entries
                 if any(
                     existing.get('value') == entry['value']
                     and existing.get('file') == entry['file']
-                    and existing.get('line') == entry.get('line')
+                    and existing.get('line_num') == entry.get('line_num')
                     for existing in cat_entries
                 ):
                     continue
@@ -449,7 +430,9 @@ def aggregated_payload_to_results(aggregated: Dict[str, Any]) -> Dict[str, Any]:
         for item in items:
             if not isinstance(item, dict):
                 continue
-            entry = {k: item[k] for k in item.keys() if k in {'value', 'file', 'line', 'username'} and item.get(k) is not None}
+            entry = {k: item[k] for k in item.keys() if k in {'value', 'file', 'line', 'line_num', 'context'} and item.get(k) is not None}
+            if 'line' not in entry and 'line_num' in entry:
+                entry['line'] = entry['line_num']
             if entry:
                 used.append(entry)
         if used:
@@ -1036,13 +1019,20 @@ def create_html_report(results: Dict[str, Set[str]], api_structure: Optional[Dic
                     if meta_entry:
                         if 'file' in meta_entry:
                             location = meta_entry['file']
-                            if meta_entry.get('line') is not None:
-                                location = f"{location}:{meta_entry['line']}"
+                            line_num = meta_entry.get('line_num')
+                            if line_num is None and meta_entry.get('line') is not None:
+                                line_num = meta_entry.get('line')
+                            if line_num is not None:
+                                location = f"{location}:{line_num}"
                             meta_bits.append(location)
-                        elif meta_entry.get('line') is not None:
-                            meta_bits.append(f"line {meta_entry['line']}")
-                        if 'username' in meta_entry:
-                            meta_bits.append(f"user {meta_entry['username']}")
+                        else:
+                            line_num = meta_entry.get('line_num')
+                            if line_num is None and meta_entry.get('line') is not None:
+                                line_num = meta_entry.get('line')
+                            if line_num is not None:
+                                meta_bits.append(f"line {line_num}")
+                        if meta_entry.get('context'):
+                            meta_bits.append(meta_entry['context'])
                     meta_html = ''
                     if meta_bits:
                         meta_html = f"<div class='meta'>{' • '.join(meta_bits)}</div>"
@@ -1178,7 +1168,7 @@ def create_csv_report(results: Dict[str, Set[str]], output_file: str = "file_ana
         writer = csv.writer(f)
 
         # Write header
-        writer.writerow(['Category', 'Type', 'Value', 'Severity', 'File', 'Line', 'Possible Owner'])
+        writer.writerow(['Category', 'Type', 'Value', 'Severity', 'File', 'Line', 'Context'])
 
         # Write data
         for category, values in sorted(results.items()):
@@ -1196,14 +1186,25 @@ def create_csv_report(results: Dict[str, Set[str]], output_file: str = "file_ana
 
             for value in sorted(values):
                 meta = _consume_meta(category, value)
+                line_num = ''
+                context = ''
+                if meta:
+                    line_val = meta.get('line_num')
+                    if line_val is None and meta.get('line') is not None:
+                        line_val = meta.get('line')
+                    if line_val is not None:
+                        line_num = line_val
+                    context_val = meta.get('context')
+                    if context_val:
+                        context = context_val
                 writer.writerow([
                     category.replace('_', ' ').title(),
                     category,
                     value,
                     severity,
                     meta.get('file') if meta else '',
-                    meta.get('line') if meta and meta.get('line') is not None else '',
-                    meta.get('username') if meta else ''
+                    line_num,
+                    context
                 ])
     
     print(f"CSV report created at {output_file}") 
