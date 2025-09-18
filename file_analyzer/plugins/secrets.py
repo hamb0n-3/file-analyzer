@@ -38,9 +38,12 @@ import os
 import re
 import tarfile
 import zipfile
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Iterable, Iterator, List, Optional, Pattern, Sequence, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Pattern, Sequence, Tuple
+
+from .base_plugin import AnalyzerPlugin
 
 # =============================================================================
 # CONFIG (tune here)
@@ -89,7 +92,7 @@ class Config:
     whitelist_patterns: Tuple[str, ...] = (
         # Lines containing these patterns are considered higher risk
         # (does not force a finding by itself, but boosts entropy tokens nearby).
-        r"(?i)\b(password|passwd|pwd|secret|token|apikey|api[_-]?key|bearer|private[_-]?key)\b(?:\s*(?:[:=.\-])\s*)?",
+        r"(?i)[^\s]*?(password|passwd|pwd|secret|token|apikey|api[_-]?key|bearer|private[_-]?key)\b(?:\s*(?:[:=.\-])\s*)?",
     )
     # Allowlist / blacklist (path-level)
     allowlist_path_globs: Tuple[str, ...] = (
@@ -507,7 +510,7 @@ class SecretScanner:
                         tags=("entropy",),
                     )
 
-    # ---- Base64 decode & rescan ---------------------------------------------
+# ---- Base64 decode & rescan ---------------------------------------------
 
     def _decode_and_rescan_base64(self, token: str, path_hint: str, *, depth: int) -> Iterator[Finding]:
         if depth <= 0 or len(token) < self.config.min_base64_len:
@@ -559,3 +562,133 @@ class SecretScanner:
             seen.add(key)
             out.append(f)
         return out
+
+
+class SecretsAnalyzerPlugin(AnalyzerPlugin):
+    """Adapter that exposes SecretScanner findings to the analyzer pipeline."""
+
+    plugin_type = 'secret_analyzer'
+    supported_file_types = {'*'}
+    requires_full_content = False
+
+    _CONFIG_FIELDS = {field.name for field in dataclasses.fields(Config)}
+    _RULE_CATEGORY_MAP: Dict[str, Tuple[str, ...]] = {
+        'AWS_ACCESS_KEY_ID': ('aws_key', 'api_key'),
+        'AWS_SECRET_ACCESS_KEY': ('aws_key', 'api_key', 'access_token'),
+        'GITHUB_TOKEN': ('access_token', 'api_token'),
+        'GITHUB_PAT': ('access_token', 'api_token'),
+        'GITLAB_PAT': ('access_token', 'api_token'),
+        'AZURE_AD_CLIENT_SECRET': ('client_secret', 'oauth_token'),
+        'GOOGLE_API_KEY': ('api_key',),
+        'STRIPE_SECRET_KEY': ('api_key',),
+        'SLACK_TOKEN': ('oauth_token', 'access_token'),
+        'SLACK_WEBHOOK': ('webhook_url',),
+        'BASIC_AUTH_URL': ('url',),
+        'JWT': ('jwt',),
+        'PASSWORD_ASSIGNMENT': ('password',),
+        'PEM_PRIVATE_KEY_BLOCK': ('private_key',),
+        'HIGH_ENTROPY_BASE64': ('high_entropy_strings',),
+        'HIGH_ENTROPY_HEX': ('high_entropy_strings',),
+        'HIGH_ENTROPY_ALNUM': ('high_entropy_strings',),
+    }
+    _TAG_CATEGORY_MAP: Dict[str, Tuple[str, ...]] = {
+        'aws': ('aws_key',),
+        'token': ('access_token',),
+        'secret': ('client_secret',),
+        'webhook': ('webhook_url',),
+        'jwt': ('jwt',),
+        'key': ('api_key',),
+        'api': ('api_key',),
+    }
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        super().__init__(config)
+        self.tags.update({'secrets', 'security'})
+        overrides = self._extract_scanner_overrides(config)
+        scanner_config = self._build_scanner_config(overrides)
+        self.scanner = SecretScanner(scanner_config)
+
+    def _extract_scanner_overrides(self, config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        if not isinstance(config, dict):
+            return {}
+        if isinstance(config.get('secret_scanner'), dict):
+            return config['secret_scanner']
+        if isinstance(config.get('secrets_plugin'), dict):
+            return config['secrets_plugin']
+        return {k: v for k, v in config.items() if k in self._CONFIG_FIELDS}
+
+    def _build_scanner_config(self, overrides: Dict[str, Any]) -> Config:
+        cfg = Config()
+        for field in dataclasses.fields(Config):
+            if field.name in overrides and overrides[field.name] is not None:
+                try:
+                    setattr(cfg, field.name, overrides[field.name])
+                except Exception:
+                    logging.debug("Ignoring invalid override for %s", field.name)
+        return cfg
+
+    def can_analyze(self, file_path: Path, file_type: str, content: Optional[str] = None) -> bool:
+        return file_type != 'binary'
+
+    def analyze(self, file_path: Path, file_type: str, content: str, results: Dict[str, set]) -> Dict[str, set]:
+        text_content = content or ''
+        if not text_content:
+            try:
+                text_content = file_path.read_text(encoding='utf-8', errors='ignore')
+            except Exception as exc:
+                logging.debug("Secrets analyzer skipped %s: %s", file_path, exc)
+                return results
+
+        data = text_content.encode('utf-8', errors='ignore')
+        if not data:
+            return results
+
+        try:
+            findings = self.scanner.scan_bytes(data, path_hint=str(file_path))
+        except Exception as exc:
+            logging.error("Secrets analyzer failure for %s: %s", file_path, exc)
+            results.setdefault('runtime_errors', set()).add(f"Secrets analyzer error: {exc}")
+            return results
+
+        if not findings:
+            return results
+
+        try:
+            file_size = file_path.stat().st_size
+        except Exception:
+            file_size = None
+        full_content = file_size is None or len(data) >= file_size
+        lines = text_content.splitlines()
+        meta_bucket = results.setdefault('__meta__', {})
+
+        for finding in findings:
+            categories = self._categories_for(finding)
+            if not categories:
+                continue
+            for category in categories:
+                values = results.setdefault(category, set())
+                values.add(finding.match)
+
+                entry = {'value': finding.match, 'file': str(file_path)}
+                if full_content and isinstance(finding.line, int) and finding.line > 0:
+                    entry['line_num'] = finding.line
+                    if 0 < finding.line <= len(lines):
+                        entry['context'] = lines[finding.line - 1].rstrip('\r\n')
+
+                meta_list = meta_bucket.setdefault(category, [])
+                if any(
+                    existing.get('value') == entry['value'] and existing.get('line_num') == entry.get('line_num')
+                    for existing in meta_list
+                ):
+                    continue
+                meta_list.append(entry)
+
+        return results
+
+    def _categories_for(self, finding: Finding) -> Tuple[str, ...]:
+        categories = set(self._RULE_CATEGORY_MAP.get(finding.rule_id, ()))
+        for tag in finding.tags or ():
+            categories.update(self._TAG_CATEGORY_MAP.get(tag.lower(), ()))
+        if not categories and finding.detector == 'entropy':
+            categories.add('high_entropy_strings')
+        return tuple(categories)

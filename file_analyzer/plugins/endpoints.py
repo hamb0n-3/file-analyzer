@@ -24,7 +24,7 @@ class EndpointPattern:
     value_group: int = 0
 
 
-def _compile_endpoint_patterns() -> list[EndpointPattern]:
+def _compile_endpoint_patterns() -> List[EndpointPattern]:
     """Return curated endpoint patterns used by the analyzer."""
 
     return [
@@ -87,12 +87,12 @@ def _compile_endpoint_patterns() -> list[EndpointPattern]:
     ]
 
 
-DEFAULT_ENDPOINT_PATTERNS: list[EndpointPattern] = _compile_endpoint_patterns()
+DEFAULT_ENDPOINT_PATTERNS: List[EndpointPattern] = _compile_endpoint_patterns()
 
 
 def iter_endpoint_matches(
-    text: str, patterns: Iterable[EndpointPattern] | None = None
-) -> Iterator[tuple[EndpointPattern, Match[str]]]:
+    text: str, patterns: Optional[Iterable[EndpointPattern]] = None
+) -> Iterator[Tuple[EndpointPattern, Match[str]]]:
     """Yield endpoint pattern matches for provided text."""
 
     active_patterns = patterns or DEFAULT_ENDPOINT_PATTERNS
