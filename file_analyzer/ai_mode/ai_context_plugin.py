@@ -47,7 +47,7 @@ class OllamaLLM:
     """Thin wrapper that now routes classification through ``llama.cpp`` instead of Ollama."""
 
     SYSTEM_PROMPT = (
-        "You classify potential security secrets. Read the value and context and decide if it is a real secret (plain text, hashed, or encrypted). Respond with JSON containing keys: secret, type, username (optional), usage, reasoning, file_location. If it is not a secret, reply with {} only."
+        "You classify potential security secrets. Read the value and context and decide if it is a real secret. If it is hashed or encrypted it is a secret. Respond with JSON containing keys: secret, type, username (optional), usage, reasoning, file_location. If it is not a secret, reply with \{n/a\} only."
 
     )
 
@@ -123,7 +123,7 @@ class OllamaLLM:
                     f"FILE TYPE: {language}\n"
                     f"SECRET: {raw_secret}\n"
                     f"CONTEXT:\n{context_snippet}\n"
-                    "If there is a secret ONLY reply with a JSON using these keys: SECRET, type, username (optional), usage, reasoning, file location. Else reply with \{\} only."
+                    "If there is a secret ONLY reply with a JSON using these keys: SECRET, type, username (optional), usage, reasoning, file location. Else reply with \{n/a\} only."
                 ),
             },
         ]
@@ -160,8 +160,8 @@ class OllamaLLM:
         try:
             response = self._llama.create_chat_completion(
                 messages=messages,
-                temperature=0.5,
-                max_tokens=1000,
+                temperature=0.2,
+                max_tokens=500,
             )
         except Exception as exc:
             logging.warning("llama.cpp chat failed: %s", exc)
