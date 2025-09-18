@@ -1,30 +1,3 @@
-
-"""
-secret_scanner.py
-
-A compact, dependency‑free module for finding secrets in files and archives.
-
-Highlights
-----------
-- Regex rules for common credentials (AWS, GitHub, Google, Slack, Stripe, JWT, PEM, etc.).
-- High‑entropy detector for suspicious tokens (base64/hex/alnum).
-- Base64 blob handling (detect, optionally decode, and rescan).
-- Archive introspection (zip/tar/tgz/gz) with recursion limits.
-- Path and content allowlist/blacklist.
-- All tunables live in the CONFIG section below.
-
-This module is **library‑only** (no CLI). Import and call `SecretScanner.scan_path(...)`
-or `SecretScanner.scan_bytes(...)`.
-
-Example:
-    from secret_scanner import SecretScanner, Config
-
-    scanner = SecretScanner(Config())
-    findings = scanner.scan_path("my_project/")
-    for f in findings:
-        print(f.to_dict(redact=True))
-"""
-
 from __future__ import annotations
 
 import base64
@@ -41,7 +14,7 @@ import zipfile
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Pattern, Sequence, Tuple
+from typing import Any, Dict, Iterable, Iterator, List, Mapping, Optional, Pattern, Sequence, Tuple
 
 from .base_plugin import AnalyzerPlugin
 
@@ -92,7 +65,7 @@ class Config:
     whitelist_patterns: Tuple[str, ...] = (
         # Lines containing these patterns are considered higher risk
         # (does not force a finding by itself, but boosts entropy tokens nearby).
-        r"(?i)[^\s]*?(password|passwd|pwd|secret|token|apikey|api[_-]?key|bearer|private[_-]?key)\b(?:\s*(?:[:=.\-])\s*)?",
+        r"(?i)[^\n]*?(password|passwd|pwd|secret|token|apikey|api[_-]?key|bearer|private[_-]?key)\b(?:\s*(?:[:=.\-])\s*)?",
     )
     # Allowlist / blacklist (path-level)
     allowlist_path_globs: Tuple[str, ...] = (
@@ -128,6 +101,26 @@ class Config:
     # Reporting
     redact_keep: int = 3                    # keep first/last N chars when redacting
     dedupe: bool = True
+
+    @classmethod
+    def field_names(cls) -> Tuple[str, ...]:
+        return tuple(field.name for field in dataclasses.fields(cls))
+
+    @classmethod
+    def from_mapping(cls, overrides: Optional[Mapping[str, Any]] = None) -> "Config":
+        cfg = cls()
+        if overrides:
+            cfg.apply_overrides(overrides)
+        return cfg
+
+    def apply_overrides(self, overrides: Mapping[str, Any]) -> None:
+        for field in dataclasses.fields(self):
+            if field.name not in overrides or overrides[field.name] is None:
+                continue
+            try:
+                setattr(self, field.name, overrides[field.name])
+            except Exception:
+                logging.debug("Ignoring invalid override for %s", field.name)
 
 
 @dataclass
@@ -202,8 +195,11 @@ def _offset_to_line_col(text: str, offset: int) -> Tuple[int, int]:
 # =============================================================================
 
 class SecretScanner:
-    def __init__(self, config: Optional[Config] = None):
-        self.config = config or Config()
+    def __init__(self, config: Optional[Config | Mapping[str, Any]] = None):
+        if isinstance(config, Config):
+            self.config = config
+        else:
+            self.config = Config.from_mapping(config)
         # Pre-compile rules
         self._rules: Dict[str, Tuple[Pattern[str], str, str, Tuple[str, ...]]] = {
             rid: (re.compile(p), sev, desc, tags)
@@ -238,48 +234,43 @@ class SecretScanner:
     # ---- Internal helpers ----------------------------------------------------
 
     def _walk_files(self, root: Path) -> Iterator[Path]:
-        include = self.config.include_globs or ("**",)
-        for pat in include:
-            for p in root.glob(pat):
-                if p.is_dir():
-                    # We'll walk manually to respect exclude_globs
-                    continue
-
-        # Manual recursive walk to apply include/exclude correctly
+        include_globs = self.config.include_globs or ("**",)
         for dirpath, dirnames, filenames in os.walk(root, followlinks=self.config.follow_symlinks):
-            rel_dir = str(Path(dirpath).relative_to(root))
+            rel_dir = Path(dirpath).relative_to(root)
             # Prune excluded directories
             dirnames[:] = [
                 d for d in dirnames
-                if not self._is_excluded(Path(rel_dir, d), root)
+                if not self._is_excluded(rel_dir / d)
             ]
             for name in filenames:
                 full = Path(dirpath) / name
-                if self._is_excluded(full.relative_to(root), root):
+                rel_file = full.relative_to(root)
+                if include_globs and not self._path_matches(rel_file, include_globs):
                     continue
-                if self.config.allowlist_path_globs and not self._is_allowlisted_path(full.relative_to(root), root):
+                if self._is_excluded(rel_file):
                     continue
-                if self._is_blacklisted_path(full.relative_to(root), root):
+                if self.config.allowlist_path_globs and not self._is_allowlisted_path(rel_file):
+                    continue
+                if self._is_blacklisted_path(rel_file):
                     continue
                 yield full
 
-    def _is_excluded(self, relpath: Path, root: Path) -> bool:
-        rel = relpath.as_posix()
-        for pat in self.config.exclude_globs:
-            if fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(f"/{rel}", pat):
-                return True
-        return False
+    def _is_excluded(self, relpath: Path) -> bool:
+        return self._path_matches(relpath, self.config.exclude_globs)
 
-    def _is_allowlisted_path(self, relpath: Path, root: Path) -> bool:
-        rel = relpath.as_posix()
-        for pat in self.config.allowlist_path_globs:
-            if fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(f"/{rel}", pat):
-                return True
-        return False
+    def _is_allowlisted_path(self, relpath: Path) -> bool:
+        return self._path_matches(relpath, self.config.allowlist_path_globs)
 
-    def _is_blacklisted_path(self, relpath: Path, root: Path) -> bool:
+    def _is_blacklisted_path(self, relpath: Path) -> bool:
+        return self._path_matches(relpath, self.config.blacklist_path_globs)
+
+    def _path_matches(self, relpath: Path, globs: Sequence[str]) -> bool:
+        if not globs:
+            return False
         rel = relpath.as_posix()
-        for pat in self.config.blacklist_path_globs:
+        for pat in globs:
+            if pat == "**":
+                return True
             if fnmatch.fnmatch(rel, pat) or fnmatch.fnmatch(f"/{rel}", pat):
                 return True
         return False
@@ -571,7 +562,6 @@ class SecretsAnalyzerPlugin(AnalyzerPlugin):
     supported_file_types = {'*'}
     requires_full_content = False
 
-    _CONFIG_FIELDS = {field.name for field in dataclasses.fields(Config)}
     _RULE_CATEGORY_MAP: Dict[str, Tuple[str, ...]] = {
         'AWS_ACCESS_KEY_ID': ('aws_key', 'api_key'),
         'AWS_SECRET_ACCESS_KEY': ('aws_key', 'api_key', 'access_token'),
@@ -605,8 +595,7 @@ class SecretsAnalyzerPlugin(AnalyzerPlugin):
         super().__init__(config)
         self.tags.update({'secrets', 'security'})
         overrides = self._extract_scanner_overrides(config)
-        scanner_config = self._build_scanner_config(overrides)
-        self.scanner = SecretScanner(scanner_config)
+        self.scanner = SecretScanner(overrides)
 
     def _extract_scanner_overrides(self, config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         if not isinstance(config, dict):
@@ -615,50 +604,55 @@ class SecretsAnalyzerPlugin(AnalyzerPlugin):
             return config['secret_scanner']
         if isinstance(config.get('secrets_plugin'), dict):
             return config['secrets_plugin']
-        return {k: v for k, v in config.items() if k in self._CONFIG_FIELDS}
-
-    def _build_scanner_config(self, overrides: Dict[str, Any]) -> Config:
-        cfg = Config()
-        for field in dataclasses.fields(Config):
-            if field.name in overrides and overrides[field.name] is not None:
-                try:
-                    setattr(cfg, field.name, overrides[field.name])
-                except Exception:
-                    logging.debug("Ignoring invalid override for %s", field.name)
-        return cfg
+        valid_fields = Config.field_names()
+        return {k: v for k, v in config.items() if k in valid_fields}
 
     def can_analyze(self, file_path: Path, file_type: str, content: Optional[str] = None) -> bool:
         return file_type != 'binary'
 
     def analyze(self, file_path: Path, file_type: str, content: str, results: Dict[str, set]) -> Dict[str, set]:
-        text_content = content or ''
-        if not text_content:
+        provided_content = content or ''
+        lines: Sequence[str] = ()
+        full_content = False
+
+        if provided_content:
+            data = provided_content.encode('utf-8', errors='ignore')
+            if not data:
+                return results
+            try:
+                findings = self.scanner.scan_bytes(data, path_hint=str(file_path))
+            except Exception as exc:
+                logging.error("Secrets analyzer failure for %s: %s", file_path, exc)
+                results.setdefault('runtime_errors', set()).add(f"Secrets analyzer error: {exc}")
+                return results
+            if not findings:
+                return results
+            try:
+                file_size = file_path.stat().st_size
+            except Exception:
+                full_content = True
+            else:
+                full_content = len(data) >= file_size
+            lines = provided_content.splitlines()
+        else:
+            try:
+                findings = self.scanner.scan_path(file_path)
+            except Exception as exc:
+                logging.error("Secrets analyzer failure for %s: %s", file_path, exc)
+                results.setdefault('runtime_errors', set()).add(f"Secrets analyzer error: {exc}")
+                return results
+            if not findings:
+                return results
             try:
                 text_content = file_path.read_text(encoding='utf-8', errors='ignore')
             except Exception as exc:
-                logging.debug("Secrets analyzer skipped %s: %s", file_path, exc)
-                return results
+                logging.debug("Secrets analyzer could not load context for %s: %s", file_path, exc)
+                lines = ()
+                full_content = False
+            else:
+                lines = text_content.splitlines()
+                full_content = True
 
-        data = text_content.encode('utf-8', errors='ignore')
-        if not data:
-            return results
-
-        try:
-            findings = self.scanner.scan_bytes(data, path_hint=str(file_path))
-        except Exception as exc:
-            logging.error("Secrets analyzer failure for %s: %s", file_path, exc)
-            results.setdefault('runtime_errors', set()).add(f"Secrets analyzer error: {exc}")
-            return results
-
-        if not findings:
-            return results
-
-        try:
-            file_size = file_path.stat().st_size
-        except Exception:
-            file_size = None
-        full_content = file_size is None or len(data) >= file_size
-        lines = text_content.splitlines()
         meta_bucket = results.setdefault('__meta__', {})
 
         for finding in findings:
