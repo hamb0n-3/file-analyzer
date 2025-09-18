@@ -261,6 +261,15 @@ def _aws_secret_post_filter(secret: str, text: str, start: int, end: int, file: 
         return False
     if any(token in lower for token in AWS_PATH_SUBSTRINGS):
         return False
+    # Reject obvious camelCase/textual identifiers masquerading as secrets.
+    has_lower = any(ch.islower() for ch in secret)
+    has_upper = any(ch.isupper() for ch in secret)
+    has_digit = any(ch.isdigit() for ch in secret)
+    has_symbol = any(ch in '+/' for ch in secret)
+    if not has_lower or not has_upper:
+        return False
+    if not (has_digit or has_symbol):
+        return False
     return True
 
 
@@ -1078,6 +1087,7 @@ class SecretsAnalyzer(AnalyzerPlugin):
             baseline_file=None,
         )
         self.scanner = SecretScanner(config=cfg)
+        self._line_cache: Dict[str, List[str]] = {}
 
     @property
     def plugin_type(self) -> str:
@@ -1220,6 +1230,10 @@ class SecretsAnalyzer(AnalyzerPlugin):
             "fingerprint": finding.fingerprint,
         }
 
+        context = self._line_context(finding)
+        if context is not None:
+            entry["context"] = context
+
         for existing in entries:
             if (
                 existing.get("value") == entry["value"]
@@ -1229,6 +1243,24 @@ class SecretsAnalyzer(AnalyzerPlugin):
                 return
 
         entries.append(entry)
+
+    def _line_context(self, finding: Finding) -> Optional[str]:
+        if finding.line is None or finding.line <= 0:
+            return None
+        cache_key = finding.file.as_posix()
+        cached_lines = self._line_cache.get(cache_key)
+        if cached_lines is None:
+            text = self.scanner._cached_file_text(finding.file)
+            if not text:
+                return None
+            cached_lines = text.splitlines()
+            if len(self._line_cache) > 32:
+                self._line_cache.clear()
+            self._line_cache[cache_key] = cached_lines
+        index = finding.line - 1
+        if 0 <= index < len(cached_lines):
+            return cached_lines[index].rstrip("\r\n")
+        return None
 
 
 # ---- CLI ---------------------------------------------------------------------

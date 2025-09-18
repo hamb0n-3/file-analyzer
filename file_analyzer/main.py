@@ -56,11 +56,11 @@ def parse_arguments():
   {colors['cyan']('Analyze multiple files:')}
     file-analyzer file ./a.py ./b.js ./c.xml
 
-  {colors['cyan']('Analyze a directory (non-recursive):')}
+  {colors['cyan']('Analyze a directory:')}
     file-analyzer dir ./project_folder
 
-  {colors['cyan']('Analyze a directory recursively:')}
-    file-analyzer dir -r ./project_folder
+  {colors['cyan']('Analyze a directory without recursion:')}
+    file-analyzer dir --no-recursive ./project_folder
 
   {colors['cyan']('Enable specific plugins:')}
     file-analyzer file ./example.js --plugin code,api
@@ -73,6 +73,7 @@ def parse_arguments():
 
   {colors['yellow']('Note:')} JSON and XML parsers run as core helpers regardless of --plugin.
     They parse structure and expose minimal metadata to assist analysis.
+    Directories are scanned recursively by default. Use --no-recursive to limit the scan to top-level files.
 
   {colors['cyan']('Export to different formats:')}
     file-analyzer file ./example.js --json results.json --html report.html
@@ -131,9 +132,21 @@ def parse_arguments():
     file_p.add_argument('--summary-only', action='store_true', help='Show only summary information')
 
     # dir subcommand
-    dir_p = subparsers.add_parser('dir', help='Analyze files in a directory (use -r to recurse)')
+    dir_p = subparsers.add_parser('dir', help='Analyze files in a directory recursively')
     dir_p.add_argument('path', help='Directory to analyze')
-    dir_p.add_argument('-r', '--recursive', action='store_true', help='Recurse into subdirectories')
+    dir_p.add_argument(
+        '--recursive',
+        dest='recursive',
+        action='store_true',
+        default=True,
+        help='Recursively scan the directory (default behavior)',
+    )
+    dir_p.add_argument(
+        '--no-recursive',
+        dest='recursive',
+        action='store_false',
+        help='Only scan the top-level directory',
+    )
     dir_p.add_argument('--plugin', dest='plugin', help='Comma-separated plugin groups: code, api(web), endpoints(network), json, xml, secrets, crypto, ml, all')
     dir_p.add_argument('--exclude', action='append', help='Exclude file pattern (glob syntax, can be used multiple times)')
     dir_p.add_argument('--include', action='append', help='Include only file pattern (glob syntax, can be used multiple times)')
@@ -224,7 +237,7 @@ def get_files_to_analyze(args) -> List[Path]:
             else:
                 logging.error(f"File not found: {path}")
     
-    # Process directory (optionally recursively)
+    # Process directory (recursive by default)
     if getattr(args, 'dir', None):
         dir_path = Path(args.dir)
         if not dir_path.exists() or not dir_path.is_dir():
@@ -234,7 +247,7 @@ def get_files_to_analyze(args) -> List[Path]:
             include_patterns = args.include if args.include else ["*"]
             exclude_patterns = args.exclude if args.exclude else []
 
-            # Determine recursion behavior: default recursive for legacy --dir usage
+            # Determine recursion behavior (recursive by default)
             recursive = getattr(args, 'recursive', True)
 
             if recursive:
@@ -655,7 +668,7 @@ def _normalize_plugin_bucket(aggregated: Dict[str, Any]) -> Tuple[Dict[str, List
             if not isinstance(item, dict):
                 continue
             cleaned_entry: Dict[str, Any] = {}
-            for key in ('value', 'file', 'line', 'username'):
+            for key in ('value', 'file', 'line', 'username', 'context'):
                 if key in item and item[key] is not None:
                     cleaned_entry[key] = item[key]
             if cleaned_entry:
@@ -810,6 +823,7 @@ def _collect_secret_entries(plugin_buckets: Optional[Dict[str, Any]]) -> List[Di
                 continue
             line = item.get('line')
             username = item.get('username')
+            context = item.get('context')
             identity_source = f"{category}|{file_path}|{line or ''}|{value}"
             digest = hashlib.sha256(identity_source.encode('utf-8', errors='ignore')).hexdigest()
             if digest in seen:
@@ -825,6 +839,8 @@ def _collect_secret_entries(plugin_buckets: Optional[Dict[str, Any]]) -> List[Di
                 record['line'] = line
             if username:
                 record['username'] = username
+            if context:
+                record['context'] = context
             entries.append(record)
     return entries
 
@@ -1161,8 +1177,6 @@ def main():
         # bridge: map to legacy --dir
         setattr(args, 'dir', args.path)
         files_to_analyze = get_files_to_analyze(args)
-        if not getattr(args, 'recursive', False) and not getattr(args, 'quiet', False):
-            print(f"{colors['yellow']('Reminder:')} use -r/--recursive to include subdirectories in the scan.")
     else:
         # Backward-compatible path
         mode = 'file' if args.file_paths else ('dir' if args.dir else None)

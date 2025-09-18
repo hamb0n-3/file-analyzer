@@ -38,24 +38,28 @@
         "password": [
           {
             "value": "secret=\"fixture-html-secret\"",
+            "context": "    <p data-secret=\"fixture-html-secret\">Sensitive placeholder rendered here.</p>",
             "file": "fixtures/sample_project/templates/index.html",
             "line": 10,
             "username": "index.html"
           },
           {
             "value": "API_KEY = \"ZZZ_SUPER_SECRET\"",
+            "context": "API_KEY = \"ZZZ_SUPER_SECRET\"",
             "file": "fixtures/sample_project/app.py",
             "line": 10,
             "username": "app.py"
           },
           {
             "value": "db-pass-123",
+            "context": "DB_PASSWORD = \"db-pass-123\"",
             "file": "fixtures/sample_project/app.py",
             "line": 11,
             "username": "app.py"
           },
           {
             "value": "SECRET = \"test-only-secret\"",
+            "context": "SECRET = \"test-only-secret\"",
             "file": "fixtures/advanced_project/src/tests/test_placeholder.py",
             "line": 4,
             "username": "test_placeholder.py"
@@ -64,60 +68,70 @@
         "api_key": [
           {
             "value": "ZZZ_SUPER_SECRET",
+            "context": "API_KEY = \"ZZZ_SUPER_SECRET\"",
             "file": "fixtures/sample_project/app.py",
             "line": 10,
             "username": "app.py"
           },
           {
             "value": "{DB_PASSWORD}",
+            "context": "    return f\"postgresql://{user}:{DB_PASSWORD}@{host}:5432/appdb\"",
             "file": "fixtures/sample_project/app.py",
             "line": 21,
             "username": "app.py"
           },
           {
             "value": "test-only-secret",
+            "context": "SECRET = \"test-only-secret\"",
             "file": "fixtures/advanced_project/src/tests/test_placeholder.py",
             "line": 4,
             "username": "test_placeholder.py"
           },
           {
             "value": "db-pass-123",
+            "context": "uri = postgresql://sample:db-pass-123@db.internal.local:5432/sample",
             "file": "fixtures/sample_project/config.ini",
             "line": 11,
             "username": "db.internal.local"
           },
           {
             "value": "fixture-client-secret",
+            "context": "client_secret = fixture-client-secret",
             "file": "fixtures/sample_project/config.ini",
             "line": 7,
             "username": "config.ini"
           },
           {
             "value": "adv-secret-001",
+            "context": "ADV_SECRET=adv-secret-001",
             "file": "fixtures/advanced_project/src/nested/secrets.txt",
             "line": 1,
             "username": "secrets.txt"
           },
           {
             "value": "svc-key-555",
+            "context": "SERVICE_API_KEY = \"svc-key-555\"",
             "file": "fixtures/sample_project/services.py",
             "line": 10,
             "username": "services.py"
           },
           {
             "value": "oauth-client-secret-abc",
+            "context": "OAUTH_CLIENT_SECRET = \"oauth-client-secret-abc\"",
             "file": "fixtures/sample_project/services.py",
             "line": 11,
             "username": "services.py"
           },
           {
             "value": "fixture-service-secret",
+            "context": "SERVICE_API_SECRET=fixture-service-secret",
             "file": "fixtures/sample_project/.env",
             "line": 2,
             "username": ".env"
           },
           {
             "value": "fixture-password-321",
+            "context": "DB_PASS=fixture-password-321",
             "file": "fixtures/sample_project/.env",
             "line": 4,
             "username": ".env"
@@ -126,48 +140,56 @@
         "access_token": [
           {
             "value": "hardcoded-token",
+            "context": "SERVICE_TOKEN = \"hardcoded-token\"",
             "file": "fixtures/sample_project/app.py",
             "line": 12,
             "username": "app.py"
           },
           {
             "value": "Bearer ADV_PROJ_KEY_987654",
+            "context": "      \"Authorization\": \"Bearer ADV_PROJ_KEY_987654\",",
             "file": "fixtures/advanced_project/src/api_client.js",
             "line": 9,
             "username": "api_client.js"
           },
           {
             "value": "adv-helper-token-xyz",
+            "context": "EXAMPLE_TOKEN = \"adv-helper-token-xyz\"",
             "file": "fixtures/advanced_project/src/helper.py",
             "line": 6,
             "username": "helper.py"
           },
           {
             "value": "fixture-refresh-token",
+            "context": "refresh_token = fixture-refresh-token",
             "file": "fixtures/sample_project/config.ini",
             "line": 8,
             "username": "config.ini"
           },
           {
             "value": "yaml-secret-456",
+            "context": "  auth_token: \"yaml-secret-456\"",
             "file": "fixtures/sample_project/settings.yaml",
             "line": 3,
             "username": "settings.yaml"
           },
           {
             "value": "QWxhZGRpbjpPcGVuU2VzYW1l",
+            "context": "token: QWxhZGRpbjpPcGVuU2VzYW1l",
             "file": "fixtures/advanced_project/src/nested/secrets.txt",
             "line": 4,
             "username": "secrets.txt"
           },
           {
             "value": "os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")",
+            "context": "    token = os.environ.get(\"SERVICE_API_SECRET\", \"fixture-service-secret\")",
             "file": "fixtures/sample_project/services.py",
             "line": 15,
             "username": "services.py"
           },
           {
             "value": "env-secret-789",
+            "context": "AUTH_TOKEN=env-secret-789",
             "file": "fixtures/sample_project/.env",
             "line": 1,
             "username": ".env"
