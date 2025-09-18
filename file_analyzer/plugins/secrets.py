@@ -74,6 +74,7 @@ class Config:
     blacklist_path_globs: Tuple[str, ...] = (
         # Files matching any of these globs are *skipped* even if include_globs matched.
         # e.g., "docs/**", "tests/**", "fixtures/**"
+        ".venv/**", ".npm/**"
     )
 
     # Regex rules (id -> (pattern, severity, description, tags))
@@ -95,7 +96,31 @@ class Config:
         # Generic & URLs
         "BASIC_AUTH_URL": (r"\b[a-zA-Z][a-zA-Z0-9+\-.]*://[^/\s:@]+:[^/\s:@]+@[^/\s]+", "high", "URL with embedded basic auth credentials", ("url",)),
         "JWT": (r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b", "medium", "JWT token", ("jwt", "token")),
-        "PASSWORD_ASSIGNMENT": (r"(?i)\b(?:password|passwd|pwd|secret|token|api[_-]?key)\s*[:=]\s*(['\"]?)([^'\" \n]{8,})\1", "medium", "Suspicious assignment", ("assignment",)),
+        "PASSWORD_ASSIGNMENT": (r"(?i)\b(?:password|passwd|pwd|secret|token|api[_-]?key)\s*[:=]\s*(['\"]?)([^'\" \n]{3,})\1", "medium", "Suspicious assignment", ("assignment",)),
+
+        # PII / Financial
+        "US_SSN": (r"(?<!\d)(?!000|666|9\d\d)\d{3}[- ]?(?!00)\d{2}[- ]?(?!0000)\d{4}(?!\d)", "high", "US Social Security Number (SSN)", ("pii", "ssn")),
+        "CREDIT_CARD_NUMBER": (r"(?<!\d)(?:4\d{3}(?:[ -]?\d{4}){3}|5[1-5]\d{2}(?:[ -]?\d{4}){3}|3[47]\d{2}(?:[ -]?\d{6})(?:[ -]?\d{5})|6(?:011|5\d{2})\d{2}(?:[ -]?\d{4}){3})(?!\d)", "high", "Payment card number (potential)", ("pii", "credit-card", "pci")),
+
+        # Private keys
+        "PGP_PRIVATE_KEY_BLOCK": (r"-----BEGIN PGP PRIVATE KEY BLOCK-----", "critical", "PGP Private Key", ("pgp", "private-key")),
+
+        # Additional common tokens
+        "TELEGRAM_BOT_TOKEN": (r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b", "high", "Telegram bot token", ("telegram", "token")),
+        "DISCORD_TOKEN": (r"\b(?:mfa\.[A-Za-z0-9_-]{80,}|[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27})\b", "high", "Discord token", ("discord", "token")),
+        "OPENAI_API_KEY": (r"\bsk-[A-Za-z0-9]{32,}\b", "high", "OpenAI API key", ("openai", "api")),
+        "SENDGRID_API_KEY": (r"\bSG\.[A-Za-z0-9_-]{16,64}\.[A-Za-z0-9_-]{16,128}\b", "high", "SendGrid API key", ("sendgrid", "api")),
+        "STRIPE_WEBHOOK_SECRET": (r"\bwhsec_[A-Za-z0-9]{32,}\b", "high", "Stripe webhook signing secret", ("stripe", "webhook")),
+        "NPM_TOKEN": (r"\bnpm_[A-Za-z0-9]{36,}\b", "high", "npm access token", ("npm", "token")),
+
+        # Database / connection strings
+        "AZURE_STORAGE_CONNECTION_STRING": (r"DefaultEndpointsProtocol=https;AccountName=[A-Za-z0-9\-]+;AccountKey=[A-Za-z0-9+/=]{43,}[^\n\r]*EndpointSuffix=core\.windows\.net", "critical", "Azure Storage connection string", ("azure", "connection-string")),
+        "MONGODB_CONNECTION_STRING": (r"mongodb(?:\+srv)?://[^/\s:@]+:[^/\s:@]+@[^\s]+", "high", "MongoDB connection URI", ("mongodb", "connection-string")),
+        "POSTGRES_CONNECTION_STRING": (r"postgres(?:ql)?://[^/\s:@]+:[^/\s:@]+@[^\s]+", "high", "PostgreSQL connection URI", ("postgres", "connection-string")),
+
+        # OAuth tokens
+        "GOOGLE_OAUTH_REFRESH_TOKEN": (r"\b1//[A-Za-z0-9_-]{43,}\b", "high", "Google OAuth refresh token", ("google", "oauth", "refresh-token")),
+        "GOOGLE_OAUTH_ACCESS_TOKEN": (r"\bya29\.[A-Za-z0-9\-_]{60,}\b", "high", "Google OAuth access token", ("google", "oauth", "access-token")),
     })
 
     # Reporting
@@ -580,6 +605,21 @@ class SecretsAnalyzerPlugin(AnalyzerPlugin):
         'HIGH_ENTROPY_BASE64': ('high_entropy_strings',),
         'HIGH_ENTROPY_HEX': ('high_entropy_strings',),
         'HIGH_ENTROPY_ALNUM': ('high_entropy_strings',),
+        # Added rules
+        'US_SSN': ('social_security',),
+        'CREDIT_CARD_NUMBER': ('credit_card',),
+        'PGP_PRIVATE_KEY_BLOCK': ('private_key',),
+        'TELEGRAM_BOT_TOKEN': ('access_token',),
+        'DISCORD_TOKEN': ('access_token',),
+        'OPENAI_API_KEY': ('api_key',),
+        'SENDGRID_API_KEY': ('api_key',),
+        'STRIPE_WEBHOOK_SECRET': ('api_key',),
+        'NPM_TOKEN': ('access_token', 'api_token'),
+        'AZURE_STORAGE_CONNECTION_STRING': ('database_connection', 'connection_string'),
+        'MONGODB_CONNECTION_STRING': ('mongodb_uri', 'database_connection', 'connection_string'),
+        'POSTGRES_CONNECTION_STRING': ('database_connection', 'connection_string'),
+        'GOOGLE_OAUTH_REFRESH_TOKEN': ('refresh_token', 'oauth_token'),
+        'GOOGLE_OAUTH_ACCESS_TOKEN': ('access_token', 'oauth_token'),
     }
     _TAG_CATEGORY_MAP: Dict[str, Tuple[str, ...]] = {
         'aws': ('aws_key',),
@@ -589,6 +629,10 @@ class SecretsAnalyzerPlugin(AnalyzerPlugin):
         'jwt': ('jwt',),
         'key': ('api_key',),
         'api': ('api_key',),
+        # Helpful mappings for new tags
+        'oauth': ('oauth_token',),
+        'connection-string': ('connection_string',),
+        'mongodb': ('mongodb_uri',),
     }
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
