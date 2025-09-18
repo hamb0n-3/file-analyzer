@@ -122,7 +122,7 @@ class OllamaLLM:
                 "content": (
                     f"FILE TYPE: {language}\n"
                     f"SECRET: {raw_secret}\n"
-                    f"CONTEXT:\n{context_snippet}\n"
+                    f"CONTEXT:\n```\n{context_snippet}\n```\n"
                     "If there is a secret ONLY reply with a JSON using these keys: SECRET, type, username (optional), usage, reasoning, file location. Else reply with \{n/a\} only."
                 ),
             },
@@ -954,7 +954,7 @@ class SecretsContextPlugin(AnalyzerPlugin):
         lines: List[str],
         occurrences: List[Tuple[int, int]],
         default_line: Optional[int] = None,
-        radius: int = 4,
+        radius: int = 1,
     ) -> str:
         if not lines:
             return ""
