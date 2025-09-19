@@ -96,7 +96,7 @@ class Config:
         # Generic & URLs
         "BASIC_AUTH_URL": (r"\b[a-zA-Z][a-zA-Z0-9+\-.]*://[^/\s:@]+:[^/\s:@]+@[^/\s]+", "high", "URL with embedded basic auth credentials", ("url",)),
         "JWT": (r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b", "medium", "JWT token", ("jwt", "token")),
-        "PASSWORD_ASSIGNMENT": (r"(?i)[^\n]*?(password|passwd|pwd|secret|token|apikey|api[_-]?key|bearer|private[_-]?key)\b(?:\s*(?:[:=.\-])\s*)?", "high", "Suspicious assignment", ("assignment",)),
+        "PASSWORD_ASSIGNMENT": (r"(?i)(?<![A-Za-z0-9_])(?:password|passwd|pwd|secret|token|api[_-]?key)(?![A-Za-z0-9_])\s*[:=]\s*(?:\"[^\"\r\n]{1,256}\"|'[^'\r\n]{1,256}'|[^\s'\"\r\n]{1,256})", "medium", "Suspicious assignment", ("assignment",)),
 
         # PII / Financial
         "US_SSN": (r"(?<!\d)(?!000|666|9\d\d)\d{3}[- ]?(?!00)\d{2}[- ]?(?!0000)\d{4}(?!\d)", "high", "US Social Security Number (SSN)", ("pii", "ssn")),
