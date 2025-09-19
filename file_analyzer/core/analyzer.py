@@ -355,14 +355,16 @@ class FileAnalyzer:
             unknown = {token for token in enabled if token not in available_tags}
             if unknown:
                 raise ValueError(f"Unknown plugin group(s): {', '.join(sorted(unknown))}")
-
-            core_plugins = [p for p in applicable_plugins if getattr(p, 'plugin_type', '') == 'core_analyzer' or 'core' in (getattr(p, 'tags', set()) or set())]
-            filtered = [p for p in applicable_plugins if p not in core_plugins and (tag_map[p] & enabled)]
-            applicable_plugins = core_plugins + filtered
+            # When a specific selection is provided, include plugins whose tags intersect
+            # the enabled set, and always include core analyzers (JSON/XML aids).
+            applicable_plugins = [
+                p for p in applicable_plugins
+                if (tag_map[p] & enabled) or getattr(p, 'plugin_type', '') == 'core_analyzer'
+            ]
         
         for plugin in applicable_plugins:
             try:
-                logging.debug(f"Applying {plugin.name} plugin")
+                logging.debug(f"Applying {plugin.name} plugin on {file_path}")
                 plugin.analyze(file_path, file_type, content, self.results)
             except Exception as e:
                 logging.error(f"Error in plugin {plugin.name}: {str(e)}")
@@ -387,10 +389,37 @@ class FileAnalyzer:
                 
                 # Convert to string for processing and run lightweight plugins on-the-fly
                 content = chunk.decode('utf-8', errors='ignore')
-                for plugin in self.plugin_registry.get_plugins_for_file(file_path, file_type, content):
+                # Determine enabled plugin tags, if any
+                enabled = set()
+                cfg_enabled = self.config.get('enabled_plugins')
+                if cfg_enabled:
+                    if isinstance(cfg_enabled, str):
+                        enabled = {t.strip().lower() for t in cfg_enabled.split(',') if t.strip()}
+                    elif isinstance(cfg_enabled, (list, set, tuple)):
+                        enabled = {str(t).strip().lower() for t in cfg_enabled}
+
+                # Collect applicable plugins for this chunk and filter by selection if provided
+                chunk_plugins = self.plugin_registry.get_plugins_for_file(file_path, file_type, content)
+                if enabled and 'all' not in enabled:
+                    def plugin_tags(p) -> set:
+                        tags = set(getattr(p, 'tags', set()) or set())
+                        t = getattr(p, 'plugin_type', '')
+                        tags |= PLUGIN_TYPE_TAGS.get(t, set())
+                        cname = p.__class__.__name__.lower()
+                        for k in ('json', 'xml'):
+                            if k in cname:
+                                tags.add(k)
+                        return {x.lower() for x in tags}
+                    chunk_plugins = [
+                        p for p in chunk_plugins
+                        if (plugin_tags(p) & enabled) or getattr(p, 'plugin_type', '') == 'core_analyzer'
+                    ]
+
+                for plugin in chunk_plugins:
                     if getattr(plugin, 'requires_full_content', False):
                         continue
                     try:
+                        logging.debug(f"Applying {plugin.name} plugin on {file_path}")
                         plugin.analyze(file_path, file_type, content, self.results)
                     except Exception as e:
                         logging.error(f"Error in plugin {plugin.name}: {str(e)}")
@@ -404,14 +433,60 @@ class FileAnalyzer:
                 gc.collect()
         
         # After chunked streaming, attempt basic plugins with empty content if they can operate without it
-        basic_plugins = [p for p in self.plugin_registry.get_plugins_for_file(file_path, file_type) 
-                         if getattr(p, 'requires_full_content', False) is False]
+        # Respect plugin selection for final basic pass as well
+        enabled = set()
+        cfg_enabled = self.config.get('enabled_plugins')
+        if cfg_enabled:
+            if isinstance(cfg_enabled, str):
+                enabled = {t.strip().lower() for t in cfg_enabled.split(',') if t.strip()}
+            elif isinstance(cfg_enabled, (list, set, tuple)):
+                enabled = {str(t).strip().lower() for t in cfg_enabled}
+        all_basic = [p for p in self.plugin_registry.get_plugins_for_file(file_path, file_type)
+                     if getattr(p, 'requires_full_content', False) is False]
+        if enabled and 'all' not in enabled:
+            def plugin_tags(p) -> set:
+                tags = set(getattr(p, 'tags', set()) or set())
+                t = getattr(p, 'plugin_type', '')
+                tags |= PLUGIN_TYPE_TAGS.get(t, set())
+                cname = p.__class__.__name__.lower()
+                for k in ('json', 'xml'):
+                    if k in cname:
+                        tags.add(k)
+                return {x.lower() for x in tags}
+            basic_plugins = [p for p in all_basic if (plugin_tags(p) & enabled)]
+        else:
+            basic_plugins = all_basic
         for plugin in basic_plugins:
             try:
+                logging.debug(f"Applying {plugin.name} plugin on {file_path}")
                 plugin.analyze(file_path, file_type, "", self.results)
             except Exception as e:
                 logging.error(f"Error in plugin {plugin.name}: {str(e)}")
                 self.results['runtime_errors'].add(f"Plugin error ({plugin.name}): {str(e)}")
+
+        # Finally, ensure core analyzers that require full content (e.g., JSON/XML aids)
+        # are executed even for huge files processed via chunking. This reads the full
+        # file as text once and runs only the core analyzers that need full content.
+        try:
+            full_content, is_binary_full = read_file_content(file_path)
+        except Exception as e:
+            logging.error(f"Failed to load full content for core analyzers on {file_path}: {e}")
+            full_content = ""
+            is_binary_full = True
+
+        if full_content:
+            core_full_plugins = [
+                p for p in self.plugin_registry.get_plugins_for_file(file_path, file_type, full_content)
+                if getattr(p, 'plugin_type', '') == 'core_analyzer' and getattr(p, 'requires_full_content', False)
+            ]
+
+            for plugin in core_full_plugins:
+                try:
+                    logging.debug(f"Applying {plugin.name} plugin on {file_path}")
+                    plugin.analyze(file_path, file_type, full_content, self.results)
+                except Exception as e:
+                    logging.error(f"Error in plugin {plugin.name}: {str(e)}")
+                    self.results['runtime_errors'].add(f"Plugin error ({plugin.name}): {str(e)}")
     
     # Pattern scanning moved into plugins; helper removed
 
