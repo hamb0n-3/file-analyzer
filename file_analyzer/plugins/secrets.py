@@ -34,11 +34,10 @@ class Config:
         "node_modules/**", "vendor/**",
         "**/*.png", "**/*.jpg", "**/*.jpeg", "**/*.gif", "**/*.bmp", "**/*.webp",
         "**/*.pdf", "**/*.woff", "**/*.woff2", "**/*.ttf",
-        "**/*.zip", "**/*.jar", "**/*.war",  # archives still scanned if explicitly passed
         "**/*.class", "**/*.exe", "**/*.dll", "**/*.so", "**/*.dylib",
     )
-    max_file_size: int = 2_000_000         # 2 MB per regular file / archive member
-    archive_max_depth: int = 2             # nested archives depth
+    max_file_size: int = 10_000_000         # 2 MB per regular file / archive member
+    archive_max_depth: int = 4             # nested archives depth
     follow_symlinks: bool = False
 
     # --- Detection behavior ---------------------------------------------------
@@ -96,7 +95,8 @@ class Config:
         # Generic & URLs
         "BASIC_AUTH_URL": (r"\b[a-zA-Z][a-zA-Z0-9+\-.]*://[^/\s:@]+:[^/\s:@]+@[^/\s]+", "high", "URL with embedded basic auth credentials", ("url",)),
         "JWT": (r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b", "medium", "JWT token", ("jwt", "token")),
-        "PASSWORD_ASSIGNMENT": (r"(?i)(?<![A-Za-z0-9_])(?:password|passwd|pwd|secret|token|api[_-]?key)(?![A-Za-z0-9_])\s*[:=]\s*(?:\"[^\"\r\n]{1,256}\"|'[^'\r\n]{1,256}'|[^\s'\"\r\n]{1,256})", "medium", "Suspicious assignment", ("assignment",)),
+        # Allow Java -DPassword=..., Unicode separators (：＝), and curly quotes (“ ” ‘ ’)
+        "PASSWORD_ASSIGNMENT": (r"(?i)(?:(?<=-D)|(?<![A-Za-z0-9_]))(?:password|passwd|pwd|secret|token|api[_-]?key)(?![A-Za-z0-9_])\s*[:=：＝]\s*(?:\"[^\"\r\n]{1,256}\"|“[^”\r\n]{1,256}”|'[^'\r\n]{1,256}'|‘[^’\r\n]{1,256}’|[^\s'\"“”‘’\r\n]{1,256})", "medium", "Suspicious assignment", ("assignment",)),
 
         # PII / Financial
         "US_SSN": (r"(?<!\d)(?!000|666|9\d\d)\d{3}[- ]?(?!00)\d{2}[- ]?(?!0000)\d{4}(?!\d)", "high", "US Social Security Number (SSN)", ("pii", "ssn")),
@@ -195,7 +195,7 @@ def _looks_binary(data: bytes) -> bool:
         return False
     # If >30% non-printable (excluding \t\r\n) consider binary.
     non_print = sum(b not in _PRINTABLE for b in data[:4096])
-    return (non_print / min(len(data), 4096)) > 0.30
+    return (non_print / min(len(data), 4096)) > 0.50
 
 def _shannon_entropy(s: str) -> float:
     if not s:
