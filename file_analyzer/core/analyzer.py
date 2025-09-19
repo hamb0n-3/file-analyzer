@@ -239,7 +239,7 @@ class FileAnalyzer:
 
             # Determine file type
             file_type = detect_file_type(file_path)
-            logging.debug(f"Detected file type: {file_type}")
+            logging.debug(f"Detected file type for {file_path}: {file_type}")
             
             # Check file size to determine processing method
             file_size = file_path.stat().st_size
@@ -251,7 +251,7 @@ class FileAnalyzer:
                 # Non-text: do not run regex text patterns; allow plugins only
                 content, is_binary = read_file_content(file_path)
                 if is_binary or not content:
-                    logging.debug(f"Skipping text pattern scan for non-text file: {file_type}")
+                    logging.debug(f"Skipping text pattern scan for non-text file {file_path} (type: {file_type})")
                 self._process_with_plugins(file_path, file_type, content or "")
             else:
                 # Text-like files: choose appropriate strategy based on size
