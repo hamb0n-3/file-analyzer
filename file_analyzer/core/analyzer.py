@@ -355,12 +355,9 @@ class FileAnalyzer:
             unknown = {token for token in enabled if token not in available_tags}
             if unknown:
                 raise ValueError(f"Unknown plugin group(s): {', '.join(sorted(unknown))}")
-            # When a specific selection is provided, include plugins whose tags intersect
-            # the enabled set, and always include core analyzers (JSON/XML aids).
-            applicable_plugins = [
-                p for p in applicable_plugins
-                if (tag_map[p] & enabled) or getattr(p, 'plugin_type', '') == 'core_analyzer'
-            ]
+            # When a specific selection is provided, include only plugins whose tags intersect
+            # the enabled set. Core analyzers (JSON/XML aids) are included only if explicitly selected.
+            applicable_plugins = [p for p in applicable_plugins if (tag_map[p] & enabled)]
         
         for plugin in applicable_plugins:
             try:
@@ -410,10 +407,7 @@ class FileAnalyzer:
                             if k in cname:
                                 tags.add(k)
                         return {x.lower() for x in tags}
-                    chunk_plugins = [
-                        p for p in chunk_plugins
-                        if (plugin_tags(p) & enabled) or getattr(p, 'plugin_type', '') == 'core_analyzer'
-                    ]
+                    chunk_plugins = [p for p in chunk_plugins if (plugin_tags(p) & enabled)]
 
                 for plugin in chunk_plugins:
                     if getattr(plugin, 'requires_full_content', False):
@@ -464,9 +458,9 @@ class FileAnalyzer:
                 logging.error(f"Error in plugin {plugin.name}: {str(e)}")
                 self.results['runtime_errors'].add(f"Plugin error ({plugin.name}): {str(e)}")
 
-        # Finally, ensure core analyzers that require full content (e.g., JSON/XML aids)
-        # are executed even for huge files processed via chunking. This reads the full
-        # file as text once and runs only the core analyzers that need full content.
+        # Finally, optionally run core analyzers that require full content (e.g., JSON/XML aids)
+        # for huge files processed via chunking — but only when core/json/xml are selected
+        # or no explicit selection was provided.
         try:
             full_content, is_binary_full = read_file_content(file_path)
         except Exception as e:
@@ -475,9 +469,29 @@ class FileAnalyzer:
             is_binary_full = True
 
         if full_content:
+            # Determine selection
+            enabled = set()
+            cfg_enabled = self.config.get('enabled_plugins')
+            if cfg_enabled:
+                if isinstance(cfg_enabled, str):
+                    enabled = {t.strip().lower() for t in cfg_enabled.split(',') if t.strip()}
+                elif isinstance(cfg_enabled, (list, set, tuple)):
+                    enabled = {str(t).strip().lower() for t in cfg_enabled}
+            def plugin_tags(p) -> set:
+                tags = set(getattr(p, 'tags', set()) or set())
+                t = getattr(p, 'plugin_type', '')
+                tags |= PLUGIN_TYPE_TAGS.get(t, set())
+                cname = p.__class__.__name__.lower()
+                for k in ('json', 'xml'):
+                    if k in cname:
+                        tags.add(k)
+                return {x.lower() for x in tags}
+
             core_full_plugins = [
                 p for p in self.plugin_registry.get_plugins_for_file(file_path, file_type, full_content)
-                if getattr(p, 'plugin_type', '') == 'core_analyzer' and getattr(p, 'requires_full_content', False)
+                if getattr(p, 'plugin_type', '') == 'core_analyzer'
+                and getattr(p, 'requires_full_content', False)
+                and (not enabled or 'all' in enabled or (plugin_tags(p) & enabled))
             ]
 
             for plugin in core_full_plugins:

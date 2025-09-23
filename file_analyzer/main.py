@@ -27,6 +27,7 @@ from .utils.output_formatter import (
     aggregate_results_by_plugin,
     aggregated_payload_to_results,
 )
+import csv
 
 
 def parse_arguments():
@@ -801,6 +802,139 @@ def _build_plugins_json_payload(plugin_buckets: Optional[Dict[str, Any]], *,
     return payload
 
 
+def _write_plugin_json(
+    plugin_name: str,
+    categories: Dict[str, List[str]],
+    entries: Dict[str, List[Dict[str, Any]]],
+    total: int,
+    out_dir: Path,
+    *,
+    generated_at: str,
+    selection: str,
+) -> Path:
+    payload: Dict[str, Any] = {
+        'generated_at': generated_at,
+        'plugin_selection': selection,
+        'plugin': plugin_name,
+        'total_findings': total,
+        'categories': categories,
+    }
+    if entries:
+        payload['entries'] = entries
+    path = out_dir / f'plugin-{plugin_name}.json'
+    _ensure_parent(path)
+    path.write_text(json.dumps(payload, indent=2), encoding='utf-8')
+    return path
+
+
+def _write_plugin_html(
+    plugin_name: str,
+    categories: Dict[str, List[str]],
+    entries: Dict[str, List[Dict[str, Any]]],
+    total: int,
+    out_dir: Path,
+    *,
+    generated_at: str,
+    selection: str,
+) -> Path:
+    def esc(s: Any) -> str:
+        try:
+            t = str(s)
+        except Exception:
+            t = ''
+        return (
+            t.replace('&', '&amp;')
+             .replace('<', '&lt;')
+             .replace('>', '&gt;')
+        )
+    lines: List[str] = []
+    lines.append('<!DOCTYPE html>')
+    lines.append('<html><head><meta charset="utf-8"><title>Plugin Report</title>')
+    lines.append('<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;margin:20px} h1{margin-bottom:0} .meta{color:#666} .cat{margin-top:18px} li{margin:2px 0}</style>')
+    lines.append('</head><body>')
+    lines.append(f'<h1>Plugin: {esc(plugin_name)}</h1>')
+    lines.append(f'<div class="meta">Generated: {esc(generated_at)} &middot; Selection: {esc(selection)} &middot; Total: {total}</div>')
+    for category in sorted(set(categories.keys()) | set(entries.keys())):
+        vals = categories.get(category, [])
+        recs = entries.get(category, [])
+        if not vals and not recs:
+            continue
+        lines.append(f'<div class="cat"><h3>{esc(category)}</h3><ul>')
+        used: set[str] = set()
+        for rec in recs:
+            val = rec.get('value')
+            if val is not None:
+                used.add(str(val))
+            file = rec.get('file') or ''
+            line = rec.get('line_num')
+            if line is None and rec.get('line') is not None:
+                line = rec.get('line')
+            loc = f"{file}:{line}" if file and line is not None else file or ''
+            ctx = rec.get('context')
+            detail = esc(val if val is not None else '<value>')
+            meta = ' '
+            if loc:
+                meta += f'({esc(loc)})'
+            if ctx:
+                meta += f' :: {esc(ctx)}'
+            lines.append(f'<li>{detail}{meta}</li>')
+        for v in vals:
+            if str(v) in used:
+                continue
+            lines.append(f'<li>{esc(v)}</li>')
+        lines.append('</ul></div>')
+    if not (categories or entries):
+        lines.append('<p>No findings.</p>')
+    lines.append('</body></html>')
+    path = out_dir / f'plugin-{plugin_name}.html'
+    _ensure_parent(path)
+    path.write_text("\n".join(lines), encoding='utf-8')
+    return path
+
+
+def _write_plugin_csv(
+    plugin_name: str,
+    categories: Dict[str, List[str]],
+    entries: Dict[str, List[Dict[str, Any]]],
+    total: int,
+    out_dir: Path,
+    *,
+    generated_at: str,
+    selection: str,
+) -> Path:
+    path = out_dir / f'plugin-{plugin_name}.csv'
+    _ensure_parent(path)
+    with open(path, 'w', newline='', encoding='utf-8') as f:
+        w = csv.writer(f)
+        w.writerow(['plugin', 'generated_at', 'selection', 'total_findings'])
+        w.writerow([plugin_name, generated_at, selection, total])
+        w.writerow([])
+        w.writerow(['category', 'value', 'file', 'line', 'context'])
+        # Entries with metadata
+        for category, recs in entries.items():
+            if not recs:
+                continue
+            for rec in recs:
+                val = rec.get('value')
+                file = rec.get('file')
+                line = rec.get('line_num')
+                if line is None and rec.get('line') is not None:
+                    line = rec.get('line')
+                ctx = rec.get('context')
+                w.writerow([category, val, file, line if line is not None else '', ctx if ctx is not None else ''])
+        # Plain values
+        for category, vals in categories.items():
+            if not vals:
+                continue
+            # Avoid duplicating values that already appeared in entries
+            used = {str(rec.get('value')) for rec in (entries.get(category) or []) if rec.get('value') is not None}
+            for v in vals:
+                if str(v) in used:
+                    continue
+                w.writerow([category, v, '', '', ''])
+    return path
+
+
 def _selected_plugins_label(args) -> str:
     plugins_value = getattr(args, 'plugin', None)
     if not plugins_value:
@@ -1017,6 +1151,41 @@ def export_all_results(all_results: Dict[str, Dict[str, set]], args, *,
         logging.info(f"Wrote aggregated plugin JSON: {plugins_json_path}")
     except Exception as exc:
         logging.warning(f"Failed to write aggregated plugin JSON: {exc}")
+
+    # Per-plugin specific outputs
+    try:
+        for plugin_name in sorted(plugin_buckets.keys()):
+            categories, entries, total = _normalize_plugin_bucket(plugin_buckets.get(plugin_name) or {})
+            # JSON
+            try:
+                pjson = _write_plugin_json(
+                    plugin_name, categories, entries, total, out_dir,
+                    generated_at=generated_at, selection=selection_label
+                )
+                logging.info(f"Wrote plugin JSON: {pjson}")
+            except Exception as exc:
+                logging.warning(f"Failed to write plugin JSON for {plugin_name}: {exc}")
+            # HTML/CSV if requested
+            if getattr(args, 'html', False):
+                try:
+                    phtml = _write_plugin_html(
+                        plugin_name, categories, entries, total, out_dir,
+                        generated_at=generated_at, selection=selection_label
+                    )
+                    logging.info(f"Wrote plugin HTML: {phtml}")
+                except Exception as exc:
+                    logging.warning(f"Failed to write plugin HTML for {plugin_name}: {exc}")
+            if getattr(args, 'csv', False):
+                try:
+                    pcsv = _write_plugin_csv(
+                        plugin_name, categories, entries, total, out_dir,
+                        generated_at=generated_at, selection=selection_label
+                    )
+                    logging.info(f"Wrote plugin CSV: {pcsv}")
+                except Exception as exc:
+                    logging.warning(f"Failed to write plugin CSV for {plugin_name}: {exc}")
+    except Exception as exc:
+        logging.warning(f"Failed generating per-plugin outputs: {exc}")
 
     for res in all_results.values():
         if isinstance(res, dict) and '__base64__' in res:
